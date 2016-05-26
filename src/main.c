@@ -6,116 +6,132 @@
 #include <unistd.h>
 #include <stdio.h>
 #include <time.h>
+#include <sys/mman.h>
 #include <math.h>
+#include <GL/glew.h>
 #include <GLFW/glfw3.h>
-#include <GL/glu.h>
+#include <dirent.h>
+#include "../../plw/src/stdout_messages.h"
+#include "../../plw/src/file_messages.h"
+#include <pthread.h>
+#include "vinyl.h"
 
+#define WIN_SIZE 2e6
+#define VIEW_WIDTH 1366
+#define VIEW_HEIGHT 768
+#define FPS 60.0f /* Frames per second we want */
+#define ROT_SPEED 2.0f /* Rotation speed of our cube */
+#define CUBE_POINTS 64 /* Number of points in our cube */
+#define DEFAULT_TARG "./FSD" /* Read from root by default */
 
-#define MAX_NAME_LEN 256
-#define VIEW_WIDTH 640
-#define VIEW_HEIGHT 480
-#define FPS 30.0f
-#define ROT_SPEED 2.0f
-#define LAND_POINTS 128
-#define CUBE_POINTS 64
-
-#define HELP_MESSAGE "Help for FSD (File Spectrum Display):\nCMD     DESCRIPTION\n====================================\n--help     Print this message\n--file     Set file for analysis\n--width    Set viewport width\n--height   Set viewport height"
+#define HELP_MESSAGE "Help for FSD (File Spectrum Display):\nCMD     DESCRIPTION\n====================================\n--help     Print this message\n--file     Set file for analysis\n--width    Set viewport width\n--height   Set viewport height\n--color    Set color of the cube\n--RPM      Set cube rotation speed\n--dir      Set directory to read from\n--filetime    Set time to display each file\n"
 
 GLfloat *coords_cube = NULL;
 GLfloat *color_cube = NULL;
-GLfloat *coords_land = NULL;
-GLfloat *color_land = NULL;
+GLenum error = 0;
 
 /* Allowed options */
-const struct option ALLOWED[6] = {{"help", 0, NULL, 0},
+const struct option ALLOWED[10] = {{"help", 0, NULL, 0},
                                   {"file", 1, NULL, 1},
                                   {"width", 1, NULL, 2},
                                   {"height", 1, NULL, 3},
                                   {"color", 1, NULL, 4},
-                                  {"RPM", 2, NULL, 5}
-                                 };
+                                  {"RPM", 2, NULL, 5},
+                                  {"win_size", 1, NULL, 6},
+                                  {"pps", 1, NULL, 7},
+                                  {"picture", 1, NULL, 8},
+                                  {"axis", 1, NULL, 9}
+                                  };
 
 /* List that we are currently using to draw and the one that we are preparing */
 GLuint cube_points_list = 0;
 GLuint cube_color_list = 0;
-GLuint land_points_list = 0;
-GLuint land_color_list = 0;
 
-/* Used to calculate rotation */
-struct timespec timer = {0, 0};
 /* Sleep for this time between frames */
-struct timespec sleeper = {0, 1000000000/FPS};
+struct timespec sleeper = {0, 1e9/FPS};
 
-/* Prepare vertex buffer objects */
+/*
+ *  Prepare vertex buffer objects
+ */
+
 void prepare_VBO(void){
-  glGenBuffersARB(1, &cube_points_list);
-  glBindBufferARB(GL_ARRAY_BUFFER_ARB, cube_points_list);
-  glBufferDataARB(GL_ARRAY_BUFFER_ARB, CUBE_POINTS*CUBE_POINTS*CUBE_POINTS*3*sizeof(GLfloat), coords_cube, GL_STATIC_DRAW);
+  glGenBuffers(1, &cube_points_list);
+  glBindBuffer(GL_ARRAY_BUFFER, cube_points_list);
+  glBufferData(GL_ARRAY_BUFFER, CUBE_POINTS*CUBE_POINTS*CUBE_POINTS*3*sizeof(GLfloat), coords_cube, GL_STATIC_DRAW);
   glVertexPointer(3, GL_FLOAT, 0, NULL);
   glEnableClientState(GL_VERTEX_ARRAY);
 
-  glGenBuffersARB(1, &cube_color_list);
-  glBindBufferARB(GL_ARRAY_BUFFER_ARB, cube_color_list);
-  glBufferDataARB(GL_ARRAY_BUFFER_ARB, CUBE_POINTS*CUBE_POINTS*CUBE_POINTS*4*sizeof(GLfloat), color_cube, GL_DYNAMIC_DRAW);
+  glGenBuffers(1, &cube_color_list);
+  glBindBuffer(GL_ARRAY_BUFFER, cube_color_list);
+  glBufferData(GL_ARRAY_BUFFER, CUBE_POINTS*CUBE_POINTS*CUBE_POINTS*4*sizeof(GLfloat), color_cube, GL_DYNAMIC_DRAW);
   glColorPointer(4, GL_FLOAT, 0, NULL);
   glEnableClientState(GL_COLOR_ARRAY);
 
-  glGenBuffersARB(1, &land_points_list);
-  glBindBufferARB(GL_ARRAY_BUFFER_ARB, land_points_list);
-  glBufferDataARB(GL_ARRAY_BUFFER_ARB, LAND_POINTS*LAND_POINTS*3*sizeof(GLfloat), coords_land, GL_STATIC_DRAW);
-  glVertexPointer(3, GL_FLOAT, 0, NULL);
-  glEnableClientState(GL_VERTEX_ARRAY);
-
-  glGenBuffersARB(1, &land_color_list);
-  glBindBufferARB(GL_ARRAY_BUFFER_ARB, land_color_list);
-  glBufferDataARB(GL_ARRAY_BUFFER_ARB, LAND_POINTS*LAND_POINTS*3*sizeof(GLfloat), color_land, GL_STATIC_DRAW);
-  glColorPointer(3, GL_FLOAT, 0, NULL);
-  glEnableClientState(GL_COLOR_ARRAY);
-
-  glBindBufferARB(GL_ARRAY_BUFFER_ARB, 0);
+  glBindBuffer(GL_ARRAY_BUFFER, 0);
 }
 
-/* Generate a landscape, generate simple mountains, */
-void recursive_land(GLfloat *buffer_points, GLfloat *buffer_colors, unsigned char offset, unsigned char top){
-  unsigned int i = 0, j = 0;
-  if(offset > 0){
-  #ifdef DEBUG
-    (void)printf("Depth %d\n", offset);
-  #endif
-    for(i = 0; i < LAND_POINTS*3; i += offset*3){
-      for(j = 0; j < LAND_POINTS*3; j += offset*3){
-        /* Prepare basis value */
-        *(buffer_points + i + j*LAND_POINTS) = (GLfloat)i / (GLfloat)LAND_POINTS / 3.0f;
-        *(buffer_points + i + j*LAND_POINTS + 1) = (GLfloat)j / (GLfloat)LAND_POINTS / 3.0f;
-        *(buffer_points + i + j*LAND_POINTS + 2) += ((GLfloat)rand()/(GLfloat)RAND_MAX)*((GLfloat)offset/(GLfloat)LAND_POINTS);
-        /* Add noise from neighbors */
-      }
-    }
-    recursive_land(buffer_points, buffer_colors, offset/2, 0);
+void free_VBO(void){
+  glBindBuffer(GL_ARRAY_BUFFER, cube_points_list);
+  glDeleteBuffers(1, &cube_points_list);
+  glBindBuffer(GL_ARRAY_BUFFER, cube_color_list);
+  glDeleteBuffers(1, &cube_color_list);
+}
+
+void update_VBO(GLfloat *color_source){
+  GLfloat *ptr = NULL;
+  glBindBuffer(GL_ARRAY_BUFFER, cube_color_list);
+  ptr = glMapBuffer(GL_ARRAY_BUFFER, GL_WRITE_ONLY);
+  memcpy(ptr, color_source, sizeof(GLfloat)*4*CUBE_POINTS*CUBE_POINTS*CUBE_POINTS);
+  glUnmapBuffer(GL_ARRAY_BUFFER);
+  glBindBuffer(GL_ARRAY_BUFFER, 0);
+}
+
+/*
+ * This function will generate coordinates where we must draw all of our points
+ */
+
+void prepare_coordinates(GLfloat *cube_grid_array){
+  unsigned int i = 0;
+  if(cube_grid_array == NULL){
+    (void)puts("ERROR: cube_grid_array is NULL for some reason!");
+    return;
   }
 
-  if(top){
-    for(i = 0; i < LAND_POINTS*3; i += offset*3){
-      for(j = 0; j < LAND_POINTS*3; j += offset*3){
-        *(buffer_colors + i + j*LAND_POINTS) = *(buffer_colors + i + j*LAND_POINTS + 1) = *(buffer_colors + i + j*LAND_POINTS + 2) += 0.1f + 0.9f * ((GLfloat)rand()/(GLfloat)RAND_MAX)*((GLfloat)offset/(GLfloat)LAND_POINTS)/2.0f;
-      }
-    }
+  for(i = 0; i < CUBE_POINTS * CUBE_POINTS * CUBE_POINTS; i++){
+    *(cube_grid_array + i*3) = (GLfloat)(i%CUBE_POINTS)/(GLfloat)CUBE_POINTS;
+    *(cube_grid_array + i*3 + 1) = (GLfloat)((unsigned int)(floor((GLfloat)i/(GLfloat)CUBE_POINTS))%CUBE_POINTS)/(GLfloat)(CUBE_POINTS);
+    *(cube_grid_array + i*3 + 2) = floor((GLfloat)(i)/(GLfloat)(CUBE_POINTS * CUBE_POINTS))/(GLfloat)CUBE_POINTS;
   }
+
+  return;
 }
 
 int main(int argc, char *argv[])
 {
   GLFWwindow *render_target = NULL;
-  GLfloat rot_Angle = 0.0f, red_set = 1.0f, green_set = 1.0f, blue_set = 1.0f, rot_speed = ROT_SPEED;
+  GLfloat rot_Angle = 0.0f, red_set = 1.0f, green_set = 1.0f, blue_set = 1.0f, rot_speed = ROT_SPEED, *temp = NULL, one = 1.0f;
   FILE *file_to_analyze = NULL;
-  char analyzed_name[MAX_NAME_LEN] = "FSD", color_string[9] = "0xFFFFFF";
-  unsigned char *data_buffer = NULL;
+  unsigned char color_string[9] = "0xFFFFFF", target_is_directory = 0, dir_path[PATH_MAX] = "", run_loop = 0;
+  unsigned char *cube_ready = NULL, *window_buffer = NULL, *analyzed_name = realpath(DEFAULT_TARG, NULL);
+
+  DIR *directory = NULL;
+  struct dirent *dir = NULL;
+
+  pid_t forked;
+
+  directory = opendir(".");
+  
+  closedir(directory);
   /* Various information relating to memory and stuff */
-  unsigned int file_size = 0, page_size = 0, i = 0, j = 0, max_val = 0, color_int = 0, file_sum = 0;
+  unsigned int file_size = 0, page_size = 0, i = 0, j = 0, max_val = 0, 
+color_int = 0, file_sum = 0;
+  unsigned long int window_size = WIN_SIZE, read_rate = 20;
   /* Used in option parsing, indexes */
   int opt_i = 0, opt_j = 1;
   /* Size of our screen */
   unsigned short viewport_w = VIEW_WIDTH, viewport_h = VIEW_HEIGHT;
+  
+  pthread_t vinyl;
 
   while((opt_i = getopt_long_only(argc, argv, "", &(ALLOWED[0]), NULL)) != -1){
     switch(opt_i){
@@ -124,7 +140,8 @@ int main(int argc, char *argv[])
         return EXIT_FAILURE;
       }
       case(1):{
-        strncpy(&(analyzed_name[0]), argv[opt_j + 1], MAX_NAME_LEN);
+        (void)free(analyzed_name);
+        analyzed_name = realpath(argv[opt_j + 1], NULL);
         opt_j+=2;
         break;
       }
@@ -153,6 +170,9 @@ int main(int argc, char *argv[])
         opt_j += 2;
         break;
       }
+      case(6):{
+        break;
+      }
       default:{
         (void)printf("Unknown option detected: %s\n", argv[opt_j]);
         opt_j++;
@@ -161,173 +181,105 @@ int main(int argc, char *argv[])
     }
   }
 
-  file_to_analyze = fopen(&(analyzed_name[0]), "rb");
-
-  if(file_to_analyze == NULL){
-    (void)printf("Error: %s not found!\n", analyzed_name);
-    return EXIT_FAILURE;
-  }
-
-  /* What is the size of our page? Optimise memory throughput */
-  page_size = sysconf(_SC_PAGESIZE);
-
-  data_buffer = calloc(page_size * 3, sizeof(char));
-
-  /* Allocate data cube, checking for success */
-  if(data_buffer == NULL){
-    (void)fclose(file_to_analyze);
-    (void)printf("Error: Failed to allocate %d bytes!\n", page_size * 3);
-    return EXIT_FAILURE;
-  }
-
-  /* Allocate a cube of points */
+  cube_ready = mmap(NULL, sizeof(unsigned char), PROT_WRITE | PROT_READ, MAP_ANONYMOUS | MAP_SHARED, -1, 0);
+  window_buffer = mmap(NULL, window_size * 3 * sizeof(unsigned char), PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_SHARED, -1, 0);
+  color_cube = mmap(NULL, CUBE_POINTS*CUBE_POINTS*CUBE_POINTS*4*sizeof(GLfloat), PROT_WRITE | PROT_READ, MAP_ANONYMOUS | MAP_SHARED, -1, 0);
   coords_cube = calloc(CUBE_POINTS*CUBE_POINTS*CUBE_POINTS*3, sizeof(GLfloat));
-  color_cube = calloc(CUBE_POINTS*CUBE_POINTS*CUBE_POINTS*4, sizeof(GLfloat));
-
-  /* Fill up the cube with magic */
-  while((i = fread(data_buffer, sizeof(char), page_size * 3, file_to_analyze)) > 0){
-    j = i;
-    file_size += i;
-    for(i = 0; i < (j / 3) * 3; i+=3){
-      file_sum += data_buffer[i] + data_buffer[i + 1] + data_buffer[i + 2];
-      *(color_cube + 4*(data_buffer[i]/4 + CUBE_POINTS*(data_buffer[i+1]/4) + CUBE_POINTS*CUBE_POINTS*(data_buffer[i+2]/4)) ) = red_set;
-      *(color_cube + 4*(data_buffer[i]/4 + CUBE_POINTS*(data_buffer[i+1]/4) + CUBE_POINTS*CUBE_POINTS*(data_buffer[i+2]/4)) + 1) = green_set;
-      *(color_cube + 4*(data_buffer[i]/4 + CUBE_POINTS*(data_buffer[i+1]/4) + CUBE_POINTS*CUBE_POINTS*(data_buffer[i+2]/4)) + 2) = blue_set;
-      *(color_cube + 4*(data_buffer[i]/4 + CUBE_POINTS*(data_buffer[i+1]/4) + CUBE_POINTS*CUBE_POINTS*(data_buffer[i+2]/4)) + 3) += 1.0;
-      if(*(color_cube + 4*(data_buffer[i]/4 + CUBE_POINTS*(data_buffer[i+1]/4) + CUBE_POINTS*CUBE_POINTS*(data_buffer[i+2]/4)) + 3) > max_val){
-        max_val = *(color_cube + 4*(data_buffer[i]/4 + CUBE_POINTS*(data_buffer[i+1]/4) + CUBE_POINTS*CUBE_POINTS*(data_buffer[i+2]/4)) + 3);
-      }
-    }
-  }
-
-  /* Check if our file is zero length (No data gained from it) */
-  if(file_size == 0){
-    (void)fclose(file_to_analyze);
-    (void)free(data_buffer);
-    (void)printf("Error: File %s is empty!\n", analyzed_name);
-    return EXIT_FAILURE;
-  }else{
-    (void)printf("Read %d bytes\n", file_size);
-  }
-
-  (void)fclose(file_to_analyze);
-  (void)free(data_buffer);
-
-  coords_land = calloc(LAND_POINTS * LAND_POINTS * 3, sizeof(GLfloat));
-  color_land = calloc(LAND_POINTS * LAND_POINTS * 3, sizeof(GLfloat));
-
-  /* Prepare to generate random landscape */
-  (void)srand(file_sum%file_size);
-
-  recursive_land(coords_land, color_land, LAND_POINTS - 1, 1);
-
-  /* Normalize all values! */
-  for(i = 0, j = 0; i < CUBE_POINTS*CUBE_POINTS*CUBE_POINTS*3; i+=3, j+=4){
-    if(color_cube[j + 3] > 1){
-      color_cube[j + 3] = logf(color_cube[j + 3])/logf(max_val*100);
-    }else{
-      color_cube[j + 3] /= (GLfloat)max_val;
-    }
-    coords_cube[i] = ((GLfloat)(i & CUBE_POINTS - 1)/(GLfloat)CUBE_POINTS);
-    coords_cube[i + 1] = ((GLfloat)((i & ((CUBE_POINTS - 1) * CUBE_POINTS))>>6)/(GLfloat)CUBE_POINTS);
-    coords_cube[i + 2] = ((GLfloat)((i & ((CUBE_POINTS - 1) * CUBE_POINTS * CUBE_POINTS))>>12)/(GLfloat)CUBE_POINTS);
-  }
-
+  vinyl_prep(window_size*3, window_buffer, read_rate, run_loop, color_cube, CUBE_POINTS, cube_ready, red_set, green_set, blue_set);
+  
+  prepare_coordinates(coords_cube);
+  
 #ifdef DEBUG
   (void)puts("Statistics are ready, init graphics.");
+  (void)fflush(stdout);
 #endif
-
-
+  
   if(!glfwInit()){
-#ifdef DEBUG
+    #ifdef DEBUG
     (void)puts("Severe failure, glfwInit() failed.");
-#endif
+    #endif
     return EXIT_FAILURE;
   }
-
-  cube_points_list = glGenLists(1);
-  cube_color_list = glGenLists(1);
-
-  if(!(render_target = glfwCreateWindow(viewport_w, viewport_h, "FSD", NULL, NULL))){
-#ifdef DEBUG
+  
+  if(!(render_target = glfwCreateWindow(viewport_w, viewport_h, "FSD", 
+    glfwGetPrimaryMonitor(), NULL))){
+    #ifdef DEBUG
     printf("Error while initializing graphics");
-#endif
+    #endif
     glfwTerminate();
     return EXIT_FAILURE;
   }
-
+    
   glfwMakeContextCurrent(render_target);
+  
+  if(GLEW_OK != glewInit()){
+    (void)puts("GLEW initialization failed!");
+    glfwDestroyWindow(render_target);
+    glfwTerminate();
+    return EXIT_FAILURE;
+  }
+    
   glClearColor(0.0, 0.0, 0.0, 0.0);
   glClear(GL_COLOR_BUFFER_BIT);
   glMatrixMode(GL_MODELVIEW);
   glLoadIdentity();
-  glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-  glEnable(GL_BLEND);
-  glEnable(GL_POINT_SMOOTH);
-  glEnable(GL_SMOOTH);
-  glHint(GL_POINT_SMOOTH_HINT, GL_NICEST);
   glPointSize(2.0);
   glViewport(0, 0, viewport_w, viewport_h);
-
   gluPerspective(75, (float)viewport_w/(float)viewport_h, 1.0, 10);
   gluLookAt(1.0, 1.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0);
-
+  //glPointSize(1.0);
+  glEnable(GL_POINT_SMOOTH);
+  glEnable(GL_BLEND);
+  glEnable(GL_ALPHA_TEST);    
+  glfwWindowHint(GLFW_SAMPLES, 8);
+  glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+  glAlphaFunc(GL_NOTEQUAL, 0);
+  glHint(GL_POINT_SMOOTH_HINT, GL_NICEST);
+  
   prepare_VBO();
-
+  
+  forked = fork();
+  
   while(!glfwWindowShouldClose(render_target)){
-    (void)glClear(GL_COLOR_BUFFER_BIT);
-
-    (void)glPushMatrix();
-    /* Move the cube to the position */
-    (void)glTranslatef(-0.2, -0.2, -0.2);
-    /* Rotate around Z axis */
-    (void)glRotatef(rot_Angle, 0.0, 1.0, 0.0);
-    /* Translate to origin */
-    (void)glTranslatef(-0.5, -0.5, -0.5);
-    glBindBufferARB(GL_ARRAY_BUFFER_ARB, 0);
-    glBindBufferARB(GL_ARRAY_BUFFER_ARB, cube_points_list);
-    glVertexPointer(3, GL_FLOAT, 0, NULL);
-    glBindBufferARB(GL_ARRAY_BUFFER_ARB, cube_color_list);
-    glColorPointer(4, GL_FLOAT, 0, NULL);
-    (void)glDrawArrays(GL_POINTS, 0, CUBE_POINTS*CUBE_POINTS*CUBE_POINTS);
-    (void)glPopMatrix();
-
-    glPushMatrix();
-    glTranslatef(-0.2f, -0.2f, -0.2f);
-    glRotatef(270.0f, 1.0f, 0.0f, 0.0f);
-    glTranslatef(-0.5f, -0.5f, -0.5f);
-
-    glRotatef(45.0f, 0.0f, 0.0f, 1.0f);
-
-    glScalef( 4.0f, 4.0f, 1.0f);
-    glTranslatef(0.0f, 0.0f, -2.0f);
-
-    glBindBufferARB(GL_ARRAY_BUFFER_ARB, 0);
-    glBindBufferARB(GL_ARRAY_BUFFER_ARB, land_points_list);
-    glVertexPointer(3, GL_FLOAT, 0, NULL);
-    glBindBufferARB(GL_ARRAY_BUFFER_ARB, land_color_list);
-    glColorPointer(3, GL_FLOAT, 0, NULL);
-    (void)glDrawArrays(GL_POINTS, 0, LAND_POINTS*LAND_POINTS);
-
-    glPopMatrix();
-
-    (void)glfwSwapBuffers(render_target);
-    (void)nanosleep(&sleeper, NULL);
-    (void)glfwPollEvents();
-    rot_Angle += 360.0f*rot_speed/FPS/60.0f;
-    (rot_Angle > 360.0f) ? (rot_Angle = rot_Angle - 360.0f) : (rot_Angle = rot_Angle);
+    if(forked == 0){
+      vinyl_read(analyzed_name);
+      vinyl_stop();
+      break;
+    }else{
+      (void)update_VBO(color_cube);
+      (void)glClear(GL_COLOR_BUFFER_BIT);
+      (void)glPushMatrix();
+      /* Move the cube to the position */
+      (void)glTranslatef(-0.2, -0.2, -0.2);
+      /* Rotate around Z axis */
+      (void)glRotatef(rot_Angle, 0.0, 1.0, 0.0);
+      /* Translate to origin */
+      (void)glTranslatef(-0.5, -0.5, -0.5);
+      glBindBuffer(GL_ARRAY_BUFFER, 0);
+      glBindBuffer(GL_ARRAY_BUFFER, cube_points_list);
+      glVertexPointer(3, GL_FLOAT, 0, NULL);
+      glBindBuffer(GL_ARRAY_BUFFER, cube_color_list);
+      glColorPointer(4, GL_FLOAT, 0, NULL);
+      (void)glDrawArrays(GL_POINTS, 0, CUBE_POINTS*CUBE_POINTS*CUBE_POINTS);
+      (void)glPopMatrix();
+      (void)glfwSwapBuffers(render_target);
+      (void)nanosleep(&sleeper, NULL);
+      (void)glfwPollEvents();
+      rot_Angle += 360.0f*rot_speed/FPS/60.0f;
+      (rot_Angle > 360.0f) ? (rot_Angle = rot_Angle - 360.0f) : (rot_Angle = rot_Angle);
+    }
   }
-
-  glDeleteBuffers(1, &cube_points_list);
-  glDeleteBuffers(1, &cube_color_list);
-  glDeleteBuffers(1, &land_points_list);
-  glDeleteBuffers(1, &land_color_list);
-  glfwTerminate();
-
-  (void)free(color_cube);
+  
+  *cube_ready = 1;
+  (void)sleep(1);
+  (void)munmap(color_cube, CUBE_POINTS*CUBE_POINTS*CUBE_POINTS*4*sizeof(GLfloat));
+  (void)free_VBO();
+  (void)glfwDestroyWindow(render_target);
+  (void)glfwTerminate();
+  (void)free(analyzed_name);
   (void)free(coords_cube);
-  (void)free(coords_land);
-  (void)free(color_land);
+  (void)munmap(cube_ready, sizeof(char));
+  (void)munmap(window_buffer, window_size * 3 * sizeof(unsigned char));
+  (void)munmap(color_cube, CUBE_POINTS*CUBE_POINTS*CUBE_POINTS * 4 * sizeof(GLfloat));
   return EXIT_SUCCESS;
 }
-
