@@ -6,7 +6,11 @@
 #include <unistd.h>
 #include <stdio.h>
 #include <time.h>
+#ifndef WIN32
 #include <sys/mman.h>
+#else
+#include "mman.h"
+#endif
 #include <math.h>
 #include <GL/glew.h>
 #include <GLFW/glfw3.h>
@@ -14,10 +18,11 @@
 #include "../../plw/src/stdout_messages.h"
 #include "../../plw/src/file_messages.h"
 #include "vinyl.h"
+#include "data_drawer.h"
 
 #define WIN_SIZE 10e6
-#define VIEW_WIDTH 1366
-#define VIEW_HEIGHT 768
+#define VIEW_WIDTH 1920
+#define VIEW_HEIGHT 1080
 #define FPS 60.0f /* Frames per second we want */
 #define ROT_SPEED 2.0f /* Rotation speed of our cube */
 #define CUBE_POINTS 64 /* Number of points in our cube */
@@ -26,9 +31,7 @@
 
 #define HELP_MESSAGE "Help for FSD (File Spectrum Display):\nCMD     DESCRIPTION\n====================================\n--help     Print this message\n--file     Set file for analysis\n--width    Set viewport width\n--height   Set viewport height\n--color    Set color of the cube\n--RPM      Set cube rotation speed\n--dir      Set directory to read from\n--win_size Set window size for smaples\n--pps      Number of bytes per sample\n--picture  Set visual for rendering\n--axis     Set origin for rotation\n--readtou  Set timeout for points\n--readrate Set sampling rate per second\n"
 
-GLfloat* coords_cube = NULL;
 GLfloat* color_cube = NULL;
-GLenum error = 0;
 
 /* Allowed options */
 const struct option ALLOWED[12] = {{"help", 0, NULL, 0},
@@ -44,73 +47,6 @@ const struct option ALLOWED[12] = {{"help", 0, NULL, 0},
         {"readtiout", 1, NULL, 10},
         {"readrate", 1, NULL, 11}
 };
-
-/* List that we are currently using to draw and the one that we are preparing */
-GLuint cube_points_list = 0;
-GLuint cube_color_list = 0;
-
-/* Sleep for this time between frames */
-struct timespec sleeper = {0, 1e9 / FPS};
-
-/*
- *  Prepare vertex buffer objects
- */
-
-void prepare_VBO ( void )
-{
-        glGenBuffers ( 1, &cube_points_list );
-        glBindBuffer ( GL_ARRAY_BUFFER, cube_points_list );
-        glBufferData ( GL_ARRAY_BUFFER, CUBE_POINTS * CUBE_POINTS * CUBE_POINTS * 3 * sizeof ( GLfloat ), coords_cube, GL_STATIC_DRAW );
-        glVertexPointer ( 3, GL_FLOAT, 0, NULL );
-        glEnableClientState ( GL_VERTEX_ARRAY );
-
-        glGenBuffers ( 1, &cube_color_list );
-        glBindBuffer ( GL_ARRAY_BUFFER, cube_color_list );
-        glBufferData ( GL_ARRAY_BUFFER, CUBE_POINTS * CUBE_POINTS * CUBE_POINTS * 4 * sizeof ( GLfloat ), color_cube, GL_DYNAMIC_DRAW );
-        glColorPointer ( 4, GL_FLOAT, 0, NULL );
-        glEnableClientState ( GL_COLOR_ARRAY );
-
-        glBindBuffer ( GL_ARRAY_BUFFER, 0 );
-}
-
-void free_VBO ( void )
-{
-        glBindBuffer ( GL_ARRAY_BUFFER, cube_points_list );
-        glDeleteBuffers ( 1, &cube_points_list );
-        glBindBuffer ( GL_ARRAY_BUFFER, cube_color_list );
-        glDeleteBuffers ( 1, &cube_color_list );
-}
-
-void update_VBO ( GLfloat* color_source )
-{
-        GLfloat* ptr = NULL;
-        glBindBuffer ( GL_ARRAY_BUFFER, cube_color_list );
-        ptr = glMapBuffer ( GL_ARRAY_BUFFER, GL_WRITE_ONLY );
-        memcpy ( ptr, color_source, sizeof ( GLfloat ) * 4 * CUBE_POINTS * CUBE_POINTS * CUBE_POINTS );
-        glUnmapBuffer ( GL_ARRAY_BUFFER );
-        glBindBuffer ( GL_ARRAY_BUFFER, 0 );
-}
-
-/*
- * This function will generate coordinates where we must draw all of our points
- */
-
-void prepare_coordinates ( GLfloat* cube_grid_array )
-{
-        unsigned int i = 0;
-        if ( cube_grid_array == NULL ) {
-                ( void ) puts ( "ERROR: cube_grid_array is NULL for some reason!" );
-                return;
-        }
-
-        for ( i = 0; i < CUBE_POINTS * CUBE_POINTS * CUBE_POINTS; i++ ) {
-                * ( cube_grid_array + i * 3 ) = ( GLfloat ) ( i % CUBE_POINTS ) / ( GLfloat ) CUBE_POINTS;
-                * ( cube_grid_array + i * 3 + 1 ) = ( GLfloat ) ( ( unsigned int ) ( floor ( ( GLfloat ) i / ( GLfloat ) CUBE_POINTS ) ) % CUBE_POINTS ) / ( GLfloat ) ( CUBE_POINTS );
-                * ( cube_grid_array + i * 3 + 2 ) = floor ( ( GLfloat ) ( i ) / ( GLfloat ) ( CUBE_POINTS * CUBE_POINTS ) ) / ( GLfloat ) CUBE_POINTS;
-        }
-
-        return;
-}
 
 int main ( int argc, char* argv[] )
 {
@@ -188,7 +124,7 @@ int main ( int argc, char* argv[] )
                 }
                 case ( 8 ) : {
                         if ( argv[opt_j + 1] ) {
-                                figure_mode = atoi( argv[opt_j + 1] );
+                                figure_mode = atoi(argv[opt_j + 1]);
                                 opt_j += 2;
                         }
                         break;
@@ -222,62 +158,18 @@ int main ( int argc, char* argv[] )
                 }
         }
 
-        cube_ready = mmap ( NULL, sizeof ( unsigned char ), PROT_WRITE | PROT_READ, MAP_ANONYMOUS | MAP_SHARED, -1, 0 );
-        window_buffer = mmap ( NULL, window_size * 3 * sizeof ( unsigned char ), PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_SHARED, -1, 0 );
-        color_cube = mmap ( NULL, CUBE_POINTS * CUBE_POINTS * CUBE_POINTS * 4 * sizeof ( GLfloat ), PROT_WRITE | PROT_READ, MAP_ANONYMOUS | MAP_SHARED, -1, 0 );
-        coords_cube = calloc ( CUBE_POINTS * CUBE_POINTS * CUBE_POINTS * 3, sizeof ( GLfloat ) );
-        vinyl_prep ( window_size * 3, window_buffer, points_per_step, run_loop, color_cube, CUBE_POINTS, cube_ready, red_set, green_set, blue_set, figure_mode, sample_rate, timeoutval);
+        render_target = initRenderer(viewport_w, viewport_h);
 
-        prepare_coordinates ( coords_cube );
+        cube_ready = mmap ( NULL, sizeof ( unsigned char ), PROT_WRITE | PROT_READ, MAP_ANONYMOUS | MAP_SHARED, -1, 0 );
+        color_cube = initCube(64);
+        vinyl_prep ( window_size * 3, points_per_step, run_loop, color_cube, CUBE_POINTS, cube_ready, red_set, green_set, blue_set, figure_mode, sample_rate, timeoutval);
 
 #ifdef DEBUG
-        ( void ) puts ( "Statistics are ready, init graphics." );
+        ( void ) puts ( "Statistics are ready." );
         ( void ) fflush ( stdout );
 #endif
 
-        if ( !glfwInit() ) {
-#ifdef DEBUG
-                ( void ) puts ( "Severe failure, glfwInit() failed." );
-#endif
-                return EXIT_FAILURE;
-        }
-
-        if ( ! ( render_target = glfwCreateWindow ( viewport_w, viewport_h, "FSD",
-                                 glfwGetPrimaryMonitor(), NULL ) ) ) {
-#ifdef DEBUG
-                printf ( "Error while initializing graphics" );
-#endif
-                glfwTerminate();
-                return EXIT_FAILURE;
-        }
-
-        glfwMakeContextCurrent ( render_target );
-
-        if ( GLEW_OK != glewInit() ) {
-                ( void ) puts ( "GLEW initialization failed!" );
-                glfwDestroyWindow ( render_target );
-                glfwTerminate();
-                return EXIT_FAILURE;
-        }
-
-        glClearColor ( 0.0, 0.0, 0.0, 0.0 );
-        glClear ( GL_COLOR_BUFFER_BIT );
-        glMatrixMode ( GL_MODELVIEW );
-        glLoadIdentity();
-        glPointSize ( 2.0 );
-        glViewport ( 0, 0, viewport_w, viewport_h );
-        gluPerspective ( 75, ( float ) viewport_w / ( float ) viewport_h, 1.0, 10 );
-        gluLookAt ( 1.0, 1.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0 );
-        //glPointSize(1.0);
-        glEnable ( GL_POINT_SMOOTH );
-        glEnable ( GL_BLEND );
-        glEnable ( GL_ALPHA_TEST );
-        glfwWindowHint ( GLFW_SAMPLES, 8 );
-        glBlendFunc ( GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA );
-        glAlphaFunc ( GL_NOTEQUAL, 0 );
-        glHint ( GL_POINT_SMOOTH_HINT, GL_NICEST );
-
-        prepare_VBO();
+        *cube_ready = 0;
 
         forked = fork();
 
@@ -285,42 +177,17 @@ int main ( int argc, char* argv[] )
                 if ( forked == 0 ) {
                         vinyl_read ( analyzed_name );
                         vinyl_stop();
-                        break;
+                        return EXIT_SUCCESS;
                 } else {
-                        ( void ) update_VBO ( color_cube );
-                        ( void ) glClear ( GL_COLOR_BUFFER_BIT );
-                        ( void ) glPushMatrix();
-                        /* Move the cube to the position */
-                        ( void ) glTranslatef ( -0.2, -0.2, -0.2 );
-                        /* Rotate around Z axis */
-                        ( void ) glRotatef ( rot_Angle, rot_axis[0], rot_axis[1], rot_axis[2] );
-                        /* Translate to origin */
-                        ( void ) glTranslatef ( -0.5, -0.5, -0.5 );
-                        glBindBuffer ( GL_ARRAY_BUFFER, 0 );
-                        glBindBuffer ( GL_ARRAY_BUFFER, cube_points_list );
-                        glVertexPointer ( 3, GL_FLOAT, 0, NULL );
-                        glBindBuffer ( GL_ARRAY_BUFFER, cube_color_list );
-                        glColorPointer ( 4, GL_FLOAT, 0, NULL );
-                        ( void ) glDrawArrays ( GL_POINTS, 0, CUBE_POINTS * CUBE_POINTS * CUBE_POINTS );
-                        ( void ) glPopMatrix();
-                        ( void ) glfwSwapBuffers ( render_target );
-                        ( void ) nanosleep ( &sleeper, NULL );
-                        ( void ) glfwPollEvents();
-                        rot_Angle += 360.0f * rot_speed / FPS / 60.0f;
-                        ( rot_Angle > 360.0f ) ? ( rot_Angle = rot_Angle - 360.0f ) : ( rot_Angle = rot_Angle );
+                        ( void ) reloadVBO();
+                        ( void ) renderSpectrum();
                 }
         }
 
         *cube_ready = 1;
+
         ( void ) sleep ( 1 );
-        ( void ) munmap ( color_cube, CUBE_POINTS * CUBE_POINTS * CUBE_POINTS * 4 * sizeof ( GLfloat ) );
-        ( void ) free_VBO();
-        ( void ) glfwDestroyWindow ( render_target );
-        ( void ) glfwTerminate();
         ( void ) free ( analyzed_name );
-        ( void ) free ( coords_cube );
-        ( void ) munmap ( cube_ready, sizeof ( char ) );
-        ( void ) munmap ( window_buffer, window_size * 3 * sizeof ( unsigned char ) );
-        ( void ) munmap ( color_cube, CUBE_POINTS * CUBE_POINTS * CUBE_POINTS * 4 * sizeof ( GLfloat ) );
+        ( void ) munmap ( cube_ready, sizeof ( unsigned char ) );
         return EXIT_SUCCESS;
 }
