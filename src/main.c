@@ -15,8 +15,6 @@
 #include <GL/glew.h>
 #include <GLFW/glfw3.h>
 #include <dirent.h>
-#include "../../plw/src/stdout_messages.h"
-#include "../../plw/src/file_messages.h"
 #include "vinyl.h"
 #include "data_drawer.h"
 
