@@ -1,11 +1,18 @@
 import os
 
-env = Environment(CC='gcc', CC_FLAGS='-v -Wall -O2')
+debug = ARGUMENTS.get('debug',False)
+env = Environment()
+
+if not debug:
+	env.Append(CCFLAGS='-s -v -Wall -Wextra -O2')
+else:
+	env.Append(CCFLAGS='-DDEBUG -g -v -Wall -Wextra -O0')
+
 
 Object_source_list = Glob('src/!main.c')
 Objects = env.Object(Object_source_list)
 SideEffect('FSD.d', Objects)
 ParseDepends('FSD.d')
-FSD_rel = env.Program("bin/FSD", ['src/main.c', 'src/data_drawer.c', 'src/vinyl.c'], LIBS=['GL', 'GLEW', 'glfw', 'm', 'GLU'], LIBPATH=['/usr/lib'])
+FSD = env.Program("bin/FSD", ['src/main.c', 'src/data_drawer.c', 'src/vinyl.c'], LIBS=['GL', 'GLEW', 'glfw', 'm', 'GLU'], LIBPATH=['/usr/lib'])
 
-Depends(FSD_rel, Objects)
+Depends(FSD, Objects)

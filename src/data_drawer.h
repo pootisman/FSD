@@ -12,7 +12,7 @@
 #define FPS 60.0f /* Frames per second we want */
 #define ROT_SPEED 2.0f /* Rotation speed of our cube */
 
-GLFWwindow *initRenderer(unsigned short width, unsigned short height);
+GLFWwindow *initRenderer(int width, int height);
 
 GLfloat *initCube(unsigned short dim);
 GLfloat *initFlat(unsigned short dim, GLfloat *(color));

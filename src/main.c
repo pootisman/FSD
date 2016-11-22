@@ -19,8 +19,8 @@
 #include "data_drawer.h"
 
 #define WIN_SIZE 10e6
-#define VIEW_WIDTH 1920
-#define VIEW_HEIGHT 1080
+#define VIEW_WIDTH -1 /* Invalid sizes used to trigger autodetection of monitor size */
+#define VIEW_HEIGHT -1
 #define FPS 60.0f /* Frames per second we want */
 #define ROT_SPEED 2.0f /* Rotation speed of our cube */
 #define CUBE_POINTS 64 /* Number of points in our cube */
@@ -67,7 +67,7 @@ int main ( int argc, char* argv[] )
         /* Used in option parsing, indexes */
         int opt_i = 0, opt_j = 1;
         /* Size of our screen */
-        unsigned short viewport_w = VIEW_WIDTH, viewport_h = VIEW_HEIGHT;
+        int viewport_w = VIEW_WIDTH, viewport_h = VIEW_HEIGHT;
 
         while ( ( opt_i = getopt_long_only ( argc, argv, "", & ( ALLOWED[0] ), NULL ) ) != -1 ) {
                 switch ( opt_i ) {

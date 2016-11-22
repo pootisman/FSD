@@ -25,8 +25,9 @@ GLFWwindow *render_target = NULL;
 /* Sleep for this time between frames */
 struct timespec sleeper = {0, 1e9 / FPS};
 
-GLFWwindow *initRenderer(unsigned short width, unsigned short height)
+GLFWwindow *initRenderer(int width, int height)
 {
+  int vid_modes = 0;
   if(!glfwInit()) {
 #ifdef DEBUG
     (void)puts("Severe failure, glfwInit() failed.");
@@ -34,6 +35,23 @@ GLFWwindow *initRenderer(unsigned short width, unsigned short height)
     return NULL;
   }
 
+  if(width <= 0 || height <= 0){
+    GLFWmonitor *mon = glfwGetPrimaryMonitor();
+    GLFWvidmode *vidmode = glfwGetVideoModes(mon, &vid_modes);
+    width = (vidmode + vid_modes - 1)->width;
+    height = (vidmode + vid_modes - 1)->height;
+
+#ifdef DEBUG
+    (void)printf("Invalid W,H set to %d,%d\n", width, height);
+#endif
+  }
+
+#ifdef DEBUG
+    (void)printf("W,H set to %d,%d\n", width, height);
+#endif
+
+  glfwWindowHint(GLFW_SAMPLES, 8);
+  glfwWindowHint(GLFW_DECORATED, 0);
   if(!(render_target = glfwCreateWindow(width, height, "FSD", glfwGetPrimaryMonitor(), NULL))) {
 #ifdef DEBUG
     printf("Error while initializing graphics");
@@ -64,7 +82,6 @@ GLFWwindow *initRenderer(unsigned short width, unsigned short height)
   glEnable(GL_POINT_SMOOTH);
   glEnable(GL_BLEND);
   glEnable(GL_ALPHA_TEST);
-  glfwWindowHint(GLFW_SAMPLES, 8);
   glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
   glAlphaFunc(GL_NOTEQUAL, 0);
   glHint(GL_POINT_SMOOTH_HINT, GL_NICEST);
