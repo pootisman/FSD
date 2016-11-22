@@ -22,7 +22,7 @@ typedef struct VINYL_PARAMS{
 }VINYL_PARAMS;
 
 void vinyl_prep(unsigned long int window_size, unsigned int pps, unsigned char loop, GLfloat *spectrum,
-unsigned char spec_dim, unsigned char *stop, GLfloat R, GLfloat G, GLfloat B, unsigned char win_figure, unsigned int reads_per_sec, double timeout);
+unsigned char spec_dim, char *stop, GLfloat R, GLfloat G, GLfloat B, unsigned char win_figure, unsigned int reads_per_sec, double timeout);
 int vinyl_read(char *root);
 void vinyl_stop(void);
 

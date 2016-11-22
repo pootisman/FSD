@@ -21,7 +21,6 @@ core
 !core/
 tags
 .DS_Store
-.directory
 *.debug
 Makefile*
 *.prl
@@ -70,4 +69,5 @@ Thumbs.db
 # --------
 *.dll
 *.exe
+
 

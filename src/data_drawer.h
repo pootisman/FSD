@@ -15,7 +15,7 @@
 GLFWwindow *initRenderer(unsigned short width, unsigned short height);
 
 GLfloat *initCube(unsigned short dim);
-GLfloat *initFlat(unsigned short dim);
+GLfloat *initFlat(unsigned short dim, GLfloat *(color));
 GLfloat *initDisk(unsigned short dim);
 GLfloat *initSphere(unsigned short dim);
 

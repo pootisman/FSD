@@ -76,9 +76,7 @@ GLFWwindow *initRenderer(unsigned short width, unsigned short height)
   return render_target;
 }
 
-#ifndef DEBUG
-inline
-#endif
+
     void
     prepCubeVBO(void)
 {
@@ -97,9 +95,6 @@ inline
   glBindBuffer(GL_ARRAY_BUFFER, 0);
 }
 
-#ifndef DEBUG
-inline
-#endif
     void
     prepFlatVBO(void)
 {
@@ -193,9 +188,10 @@ GLfloat *initCube(unsigned short dim)
 }
 
 /*
- * Bar-like histogram
- *
-GLfloat *initFlat(unsigned short dim)
+ * Bar-like histogram, drawn with cubes,
+ * Returns pointer to coordinates of the cube vertexes
+ */
+GLfloat *initFlat(unsigned short dim, GLfloat *(color))
 {
   if(dim == 0) {
     dim = CUBE_POINTS;
@@ -212,20 +208,61 @@ GLfloat *initFlat(unsigned short dim)
     X = (GLfloat)(i % dimensions) / (GLfloat)dimensions;
     Y = (GLfloat)((unsigned int)(floor((GLfloat)i / (GLfloat)dimensions)) % dimensions) / (GLfloat)(dimensions);
     Z = (GLfloat)floor((GLfloat)(i) / (GLfloat)(dimensions * dimensions)) / (GLfloat)dimensions;
-    *(coords + i) = X + ;
-    *(coords + i + 1) = Y + ;
+
+    /*
+     * Bottom edge
+     */
+    *(coords + i) = X + 0.75 * 1/(GLfloat)dim;
+    *(coords + i + 1) = Y + 0.75 * 1.0/(GLfloat)dim;
     *(coords + i + 2) = Z + 0.0;
+
+    *(coords + i) = X - 0.75 * 1/(GLfloat)dim;
+    *(coords + i + 1) = Y + 0.75 * 1.0/(GLfloat)dim;
+    *(coords + i + 2) = Z + 0.0;
+
+    *(coords + i) = X + 0.75 * 1/(GLfloat)dim;
+    *(coords + i + 1) = Y - 0.75 * 1.0/(GLfloat)dim;
+    *(coords + i + 2) = Z + 0.0;
+
+    *(coords + i) = X - 0.75 * 1/(GLfloat)dim;
+    *(coords + i + 1) = Y - 0.75 * 1.0/(GLfloat)dim;
+    *(coords + i + 2) = Z + 0.0;
+
+    /*
+     * Top edge
+     */
+    *(coords + i) = X + 0.75 * 1/(GLfloat)dim;
+    *(coords + i + 1) = Y + 0.75 * 1.0/(GLfloat)dim;
+    *(coords + i + 2) = Z + 0.0;
+
+    *(coords + i) = X - 0.75 * 1/(GLfloat)dim;
+    *(coords + i + 1) = Y + 0.75 * 1.0/(GLfloat)dim;
+    *(coords + i + 2) = Z + 0.0;
+
+    *(coords + i) = X + 0.75 * 1/(GLfloat)dim;
+    *(coords + i + 1) = Y - 0.75 * 1.0/(GLfloat)dim;
+    *(coords + i + 2) = Z + 0.0;
+
+    *(coords + i) = X - 0.75 * 1/(GLfloat)dim;
+    *(coords + i + 1) = Y - 0.75 * 1.0/(GLfloat)dim;
+    *(coords + i + 2) = Z + 0.0;
+  }
+
+  for(i = 0; i < dimensions * dimensions * dimensions * 8; i++){
+    *(colors + i) = *(color);
+    *(colors + i + 1) = *(color + 1);
+    *(colors + i + 2) = *(color + 2);
+    *(colors + i + 3) = (GLfloat)0.0;
   }
 
   prepFlatVBO();
 
-  (void)free(coords);
+  (void)free(colors);
 
   shape = FLAT;
 
-  return colors;
+  return coords;
 }
-*/
 
 void reloadVBO(void)
 {
@@ -235,6 +272,14 @@ void reloadVBO(void)
     glBindBuffer(GL_ARRAY_BUFFER, VBO_buffers[1]);
     ptr = glMapBuffer(GL_ARRAY_BUFFER, GL_WRITE_ONLY);
     memcpy(ptr, colors, sizeof(GLfloat) * 4 * dimensions * dimensions * dimensions);
+    glUnmapBuffer(GL_ARRAY_BUFFER);
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
+    break;
+  }
+  case(FLAT):{
+    glBindBuffer(GL_ARRAY_BUFFER, VBO_buffers[0]);
+    ptr = glMapBuffer(GL_ARRAY_BUFFER, GL_WRITE_ONLY);
+    memcpy(ptr, coords, sizeof(GLfloat) * 3 * 8 * dimensions * dimensions);
     glUnmapBuffer(GL_ARRAY_BUFFER);
     glBindBuffer(GL_ARRAY_BUFFER, 0);
     break;
@@ -261,7 +306,19 @@ void renderSpectrum(void)
   glVertexPointer(3, GL_FLOAT, 0, NULL);
   glBindBuffer(GL_ARRAY_BUFFER, VBO_buffers[1]);
   glColorPointer(4, GL_FLOAT, 0, NULL);
-  (void)glDrawArrays(GL_POINTS, 0, dimensions * dimensions * dimensions);
+  switch(shape){
+    case(CUBE):{
+      (void)glDrawArrays(GL_POINTS, 0, dimensions * dimensions * dimensions);
+      break;
+    }
+/*    case(FLAT):{
+      /*
+       * TODO: Figure out how to draw cubes efficiently!
+       *
+      (void)glDrawArrays(GL_)
+      break;
+    }*/
+  }
   (void)glPopMatrix();
   (void)glfwSwapBuffers(render_target);
   (void)nanosleep(&sleeper, NULL);

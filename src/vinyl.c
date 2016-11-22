@@ -18,7 +18,7 @@ double *stat_intern = NULL;
 struct timespec win_timer = {0, 1e9/600};
 
 void vinyl_prep(unsigned long int window_size, unsigned int pps, unsigned char loop, GLfloat *spectrum,
-unsigned char spec_dim, unsigned char *stop, GLfloat R, GLfloat G, GLfloat B, unsigned char win_figure, unsigned int reads_per_sec, double timeout){
+unsigned char spec_dim, char *stop, GLfloat R, GLfloat G, GLfloat B, unsigned char win_figure, unsigned int reads_per_sec, double timeout){
   params = calloc(1, sizeof(VINYL_PARAMS));
   params->win_size = (window_size >= 1e1) ? (window_size) : (1e1);
   params->win_pos = 0;
@@ -37,56 +37,54 @@ unsigned char spec_dim, unsigned char *stop, GLfloat R, GLfloat G, GLfloat B, un
   win_timer.tv_nsec = 1e9/reads_per_sec;
 }
 
-#ifndef DEBUG
-inline
-#endif
-void update_stats(unsigned char *vector1, unsigned char 
+
+void update_stats(unsigned char *vector1, unsigned char
 *vector2){
   unsigned long int i = 0, max = 0;
   float mean = 0.0f, variance = 0.0f, entropy = 0.0f;
-  
+
   /* Modify local stats */
   for(i = 0; i < params->pps; i++){
-    *(stat_intern + vector1[i*3]/4 + vector1[i*3 + 1]/4 * 
-    (params->spec_dimensions - 1) + vector1[i*3 + 2]/4 * params->spec_dimensions 
+    *(stat_intern + vector1[i*3]/4 + vector1[i*3 + 1]/4 *
+    (params->spec_dimensions - 1) + vector1[i*3 + 2]/4 * params->spec_dimensions
     * (params->spec_dimensions - 1)) -= 1;
 
-    if(*(stat_intern + vector1[i*3]/4 + vector1[i*3 + 1]/4 * 
-    (params->spec_dimensions - 1) + vector1[i*3 + 2]/4 * params->spec_dimensions 
+    if(*(stat_intern + vector1[i*3]/4 + vector1[i*3 + 1]/4 *
+    (params->spec_dimensions - 1) + vector1[i*3 + 2]/4 * params->spec_dimensions
     * (params->spec_dimensions - 1)) < 0){
-      *(stat_intern + vector1[i*3]/4 + vector1[i*3 + 1]/4 * 
-      (params->spec_dimensions - 1) + vector1[i*3 + 2]/4 * params->spec_dimensions 
-      * (params->spec_dimensions - 1)) = 0; 
+      *(stat_intern + vector1[i*3]/4 + vector1[i*3 + 1]/4 *
+      (params->spec_dimensions - 1) + vector1[i*3 + 2]/4 * params->spec_dimensions
+      * (params->spec_dimensions - 1)) = 0;
     }
   }
 
   for(i = 0; i < params->pps; i++){
-    *(stat_intern + vector2[i*3]/4 + vector2[i*3 + 1]/4 * 
-    (params->spec_dimensions - 1) + vector2[i*3 + 2]/4 * params->spec_dimensions 
+    *(stat_intern + vector2[i*3]/4 + vector2[i*3 + 1]/4 *
+    (params->spec_dimensions - 1) + vector2[i*3 + 2]/4 * params->spec_dimensions
     * (params->spec_dimensions - 1)) += 1;
-    
-    if(*(stat_intern + vector2[i*3]/4 + vector2[i*3 + 1]/4 * 
-    (params->spec_dimensions - 1) + vector2[i*3 + 2]/4 * params->spec_dimensions 
+
+    if(*(stat_intern + vector2[i*3]/4 + vector2[i*3 + 1]/4 *
+    (params->spec_dimensions - 1) + vector2[i*3 + 2]/4 * params->spec_dimensions
     * (params->spec_dimensions - 1)) > LONG_MAX){
-      *(params->spectrum + vector2[i*3]/4 + vector2[i*3 + 1]/4 * 
-      (params->spec_dimensions - 1) + vector2[i*3 + 2]/4 * params->spec_dimensions 
-      * (params->spec_dimensions - 1)) = LONG_MAX; 
-    }    
+      *(params->spectrum + vector2[i*3]/4 + vector2[i*3 + 1]/4 *
+      (params->spec_dimensions - 1) + vector2[i*3 + 2]/4 * params->spec_dimensions
+      * (params->spec_dimensions - 1)) = LONG_MAX;
+    }
   }
-  
+
   /* Find new maximum */
   for(i = 0; i < params->spec_dimensions*params->spec_dimensions*params->spec_dimensions; i++){
     if(max < *(stat_intern + i)){
       max = *(stat_intern + i);
     }
   }
-  
-  /* Calculate variance, mean, entropy and decide on color that we must choose 
+
+  /* Calculate variance, mean, entropy and decide on color that we must choose
   for(i = 0; i < params->spec_dimensions * params.spec_dimensions * params->spec_dimensions; i++){
     variance += (float)*(stat_intern)
   }
   */
-  
+
   /* Update the actual stats */
   for(i = 0; i < params->spec_dimensions*params->spec_dimensions*params->spec_dimensions; i++){
     *(params->spectrum + i*4 + 3) = (GLfloat)(logf(*(stat_intern + i))/logf(max));
@@ -96,22 +94,20 @@ void update_stats(unsigned char *vector1, unsigned char
   }
 }
 
-#ifndef DEBUG
-inline
-#endif
+
 void update_stats_simple(unsigned char *vector1, double maxdist){
   unsigned long int i = 0;
   float temp = 0.0;
   struct timespec times;
-  
+
   clock_gettime(CLOCK_MONOTONIC_RAW, &times);
-  
+
   for(i = 0; i < params->pps; i++){
-    *(stat_intern + vector1[i*3]/4 + vector1[i*3 + 1]/4 * 
-    (params->spec_dimensions - 1) + vector1[i*3 + 2]/4 * params->spec_dimensions 
+    *(stat_intern + vector1[i*3]/4 + vector1[i*3 + 1]/4 *
+    (params->spec_dimensions - 1) + vector1[i*3 + 2]/4 * params->spec_dimensions
     * (params->spec_dimensions - 1)) = times.tv_sec + (1e-9)*times.tv_nsec;
   }
-  
+
   /* Update the actual stats */
   for(i = 0; i < params->spec_dimensions*params->spec_dimensions*params->spec_dimensions; i++){
     temp = (float)(times.tv_sec + (1e-9)*times.tv_nsec - *(stat_intern + i))/(float)maxdist;
@@ -133,7 +129,7 @@ int vinyl_read(char *root){
   (void)fflush(stdout);
 #endif
   stat(root, &source_stat);
-  
+
   if(S_ISDIR(source_stat.st_mode)){
     DIR *listing = opendir(root);
     if(listing != NULL){
@@ -150,7 +146,7 @@ int vinyl_read(char *root){
           (void)printf("fullpath %s\n", &(fullpath[0]));
           (void)printf("Analysing %s\n", finalpath);
           (void)fflush(stdout);
-#endif    
+#endif
           (void)fflush(stdout);
           (void)vinyl_read(finalpath);
           (void)free(finalpath);

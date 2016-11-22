@@ -52,7 +52,7 @@ int main ( int argc, char* argv[] )
         GLfloat rot_Angle = 0.0f, red_set = 1.0f, green_set = 1.0f, blue_set = 1.0f, rot_speed = ROT_SPEED, rot_axis[3] = {0.0, 1.0, 0.0};
         double timeoutval = MAXTIMEOUT;
         unsigned char color_string[9] = "0xFFFFFF", run_loop = 0, figure_mode = 1;
-        unsigned char* cube_ready = NULL, *window_buffer = NULL, *analyzed_name = realpath ( DEFAULT_TARG, NULL );
+        char* cube_ready = NULL, *window_buffer = NULL, *analyzed_name = realpath ( DEFAULT_TARG, NULL );
 
         DIR* directory = NULL;
 
