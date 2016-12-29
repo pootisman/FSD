@@ -21,9 +21,19 @@ typedef struct VINYL_PARAMS{
   GLfloat R,G,B;
 }VINYL_PARAMS;
 
+typedef struct CUBE_PATTERN{
+  unsigned char R_dims[3];
+  unsigned char G_dims[3];
+  unsigned char B_dims[3];
+  double *R,*G,*B;
+}CUBE_PATTERN;
+
 void vinyl_prep(unsigned long int window_size, unsigned int pps, unsigned char loop, GLfloat *spectrum,
-unsigned char spec_dim, char *stop, GLfloat R, GLfloat G, GLfloat B, unsigned char win_figure, unsigned int reads_per_sec, double timeout);
-int vinyl_read(char *root);
+unsigned char spec_dim, unsigned char *stop, GLfloat R, GLfloat G, GLfloat B, unsigned char win_figure, unsigned int reads_per_sec, double timeout);
+int load_pattern(char *fname);
 void vinyl_stop(void);
+void update_stats(unsigned char *vector1, unsigned char *vector2);
+void update_stats_simple(unsigned char *vector1, double maxdist);
+
 
 #endif

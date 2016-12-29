@@ -1,7 +1,9 @@
 #ifndef _DATA_DRAWER_
 #define _DATA_DRAWER_
 
+#include <GL/glew.h>
 #include <GL/gl.h>
+#include <GLFW/glfw3.h>
 
 #define CUBE 0x00
 #define FLAT 0x0F

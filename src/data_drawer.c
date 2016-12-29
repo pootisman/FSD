@@ -187,7 +187,7 @@ GLfloat *initCube(unsigned short dim)
                 MAP_ANONYMOUS | MAP_SHARED, -1, 0);
   coords = calloc(dimensions * dimensions * dimensions * 3, sizeof(GLfloat));
 
-  for(i = 0; i < dimensions * dimensions * dimensions; i++) {
+  for(i = 0; i < (unsigned int)(dimensions * dimensions * dimensions); i++) {
     *(coords + i * 3) = (GLfloat)(i % dimensions) / (GLfloat)dimensions;
     *(coords + i * 3 + 1) =
         (GLfloat)((unsigned int)(floor((GLfloat)i / (GLfloat)dimensions)) % dimensions) / (GLfloat)(dimensions);
@@ -221,7 +221,7 @@ GLfloat *initFlat(unsigned short dim, GLfloat *(color))
                 MAP_ANONYMOUS | MAP_SHARED, -1, 0);
   coords = calloc(dimensions * dimensions * 3 * 8, sizeof(GLfloat));
 
-  for(i = 0; i < dimensions * dimensions; i++) {
+  for(i = 0; i < (unsigned int)(dimensions * dimensions); i++) {
     X = (GLfloat)(i % dimensions) / (GLfloat)dimensions;
     Y = (GLfloat)((unsigned int)(floor((GLfloat)i / (GLfloat)dimensions)) % dimensions) / (GLfloat)(dimensions);
     Z = (GLfloat)floor((GLfloat)(i) / (GLfloat)(dimensions * dimensions)) / (GLfloat)dimensions;
@@ -265,7 +265,7 @@ GLfloat *initFlat(unsigned short dim, GLfloat *(color))
     *(coords + i + 2) = Z + 0.0;
   }
 
-  for(i = 0; i < dimensions * dimensions * dimensions * 8; i++){
+  for(i = 0; i < (unsigned int)(dimensions * dimensions * dimensions * 8); i++){
     *(colors + i) = *(color);
     *(colors + i + 1) = *(color + 1);
     *(colors + i + 2) = *(color + 2);
