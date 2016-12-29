@@ -55,7 +55,7 @@ int load_pattern(char *fname){
   
   (void)fscanf(I, "%hhu %hhu %hhu\n", &(pattern->R_dims[0]), &(pattern->R_dims[1]), &(pattern->R_dims[2]));
   (void)fscanf(I, "%hhu %hhu %hhu\n", &(pattern->G_dims[0]), &(pattern->G_dims[1]), &(pattern->G_dims[2]));
-  (void)fscanf(I, "%hhu %hhu %hhu\n", &(pattern->B_dims[0]), &(pattern->B_dims[1]), &(pattern->B_dims[2]));
+  (void)fscanf(I, "%hhu %hhu %hhu\n\n", &(pattern->B_dims[0]), &(pattern->B_dims[1]), &(pattern->B_dims[2]));
 
   red_total = pattern->R_dims[0] * pattern->R_dims[1] * pattern->R_dims[2];
   green_total = pattern->G_dims[0] * pattern->G_dims[1] * pattern->G_dims[2];
@@ -86,29 +86,57 @@ int load_pattern(char *fname){
       }
     }
   }
-  if(fscanf(I, "%lf\n", pattern->R + j) < 1){
+  if(fscanf(I, "%lf\n\n", pattern->R + j) < 1){
     (void)puts("ERROR: Failed to fully read red pattern component from file!");
   }
 
   for(j = 0; j < green_total - 1; j++){
-    if(fscanf(I,"%lf ", pattern->G + j)){
-      continue;
+    if(j % pattern->G_dims[0] == 0 && j > 0){
+      if(fscanf(I,"\n%lf ", pattern->G + j)){
+        continue;
+      }else{
+        (void)puts("ERROR: Failed to fully read red pattern component from file!");
+      }
+    }else if(j % (pattern->G_dims[0] * pattern->G_dims[1]) == 0 && j > 0){
+      if(fscanf(I,"\n\n%lf", pattern->G + j)){
+        continue;
+      }else{
+        (void)puts("ERROR: Failed to fully read red pattern component from file!");
+      }
     }else{
-      (void)puts("ERROR: Failed to fully read green pattern component from file!");
+      if(fscanf(I,"%lf ", pattern->G + j)){
+        continue;
+      }else{
+        (void)puts("ERROR: Failed to fully read red pattern component from file!");
+      }
     }
   }
-  if(fscanf(I, "%lf\n", pattern->G + j) < 1){
+  if(fscanf(I, "%lf\n\n", pattern->G + j) < 1){
     (void)puts("ERROR: Failed to fully read red pattern component from file!");
   }
   
   for(j = 0; j < blue_total - 1; j++){
-    if(fscanf(I,"%lf ", pattern->B + j)){
-      continue;
+    if(j % pattern->B_dims[0] == 0 && j > 0){
+      if(fscanf(I,"\n%lf ", pattern->B + j)){
+        continue;
+      }else{
+        (void)puts("ERROR: Failed to fully read red pattern component from file!");
+      }
+    }else if(j % (pattern->B_dims[0] * pattern->B_dims[1]) == 0 && j > 0){
+      if(fscanf(I,"\n\n%lf", pattern->B + j)){
+        continue;
+      }else{
+        (void)puts("ERROR: Failed to fully read red pattern component from file!");
+      }
     }else{
-      (void)puts("ERROR: Failed to fully read blue pattern component from file!");
+      if(fscanf(I,"%lf ", pattern->B + j)){
+        continue;
+      }else{
+        (void)puts("ERROR: Failed to fully read red pattern component from file!");
+      }
     }
   }
-  if(fscanf(I, "%lf\n", pattern->B + j) < 1){
+  if(fscanf(I, "%lf\n\n", pattern->B + j) < 1){
     (void)puts("ERROR: Failed to fully read red pattern component from file!");
   }
 
@@ -116,17 +144,17 @@ int load_pattern(char *fname){
   
   (void)puts("Pattern loaded");
   
-  red_steps[0] = params->spec_dimensions/pattern->R_dims[0];
-  red_steps[1] = params->spec_dimensions/pattern->R_dims[1];
-  red_steps[2] = params->spec_dimensions/pattern->R_dims[2];
+  red_steps[0] = (unsigned long int)floor(params->spec_dimensions/pattern->R_dims[0]);
+  red_steps[1] = (unsigned long int)floor(params->spec_dimensions/pattern->R_dims[1]);
+  red_steps[2] = (unsigned long int)floor(params->spec_dimensions/pattern->R_dims[2]);
 
-  green_steps[0] = params->spec_dimensions/pattern->G_dims[0];
-  green_steps[1] = params->spec_dimensions/pattern->G_dims[1];
-  green_steps[2] = params->spec_dimensions/pattern->G_dims[2];
+  green_steps[0] = (unsigned long int)floor(params->spec_dimensions/pattern->G_dims[0]);
+  green_steps[1] = (unsigned long int)floor(params->spec_dimensions/pattern->G_dims[1]);
+  green_steps[2] = (unsigned long int)floor(params->spec_dimensions/pattern->G_dims[2]);
 
-  blue_steps[0] = params->spec_dimensions/pattern->B_dims[0];
-  blue_steps[1] = params->spec_dimensions/pattern->B_dims[1];
-  blue_steps[2] = params->spec_dimensions/pattern->B_dims[2];
+  blue_steps[0] = (unsigned long int)floor(params->spec_dimensions/pattern->B_dims[0]);
+  blue_steps[1] = (unsigned long int)floor(params->spec_dimensions/pattern->B_dims[1]);
+  blue_steps[2] = (unsigned long int)floor(params->spec_dimensions/pattern->B_dims[2]);
   
   /*
    * Fill the cube layer by layer [R,G,B]
@@ -138,7 +166,7 @@ int load_pattern(char *fname){
     y = (y >= pattern->R_dims[1]) ? (pattern->R_dims[1] - 1) : (y);
     z = (unsigned long int)floor(j / (params->spec_dimensions * params->spec_dimensions) / red_steps[2]);
     z = (z >= pattern->R_dims[2]) ? (pattern->R_dims[2] - 1) : (z);
-    fflush(stdout);
+    //(void)printf("Coords: %ld %ld %ld\n", x, y, z);
     *(params->spectrum + j * 4) = (GLfloat)*(pattern->R + x + y * pattern->R_dims[0] + z * pattern->R_dims[0] * pattern->R_dims[1]);
   }
   
@@ -146,7 +174,7 @@ int load_pattern(char *fname){
     x = (unsigned long int)floor((j % params->spec_dimensions) / green_steps[0]);
     x = (x >= pattern->G_dims[0]) ? (pattern->G_dims[0] - 1) : (x);
     y = (unsigned long int)floor((j % (params->spec_dimensions * params->spec_dimensions)) / params->spec_dimensions / green_steps[1]);
-    y = (z >= pattern->G_dims[1]) ? (pattern->G_dims[1] - 1) : (y);
+    y = (y >= pattern->G_dims[1]) ? (pattern->G_dims[1] - 1) : (y);
     z = (unsigned long int)floor(j / (params->spec_dimensions * params->spec_dimensions) / green_steps[2]);
     z = (z >= pattern->G_dims[2]) ? (pattern->G_dims[2] - 1) : (z);
     *(params->spectrum + j * 4 + 1) = (GLfloat)*(pattern->G + x + y * pattern->G_dims[0] + z * pattern->G_dims[0] * pattern->G_dims[1]);
@@ -253,6 +281,12 @@ void update_stats_simple(unsigned char *vector1, double maxdist){
 void vinyl_stop(void){
   (void)free(params->dest);
   (void)free(params);
+  if(pattern){
+    (void)free(pattern->R);
+    (void)free(pattern->G);
+    (void)free(pattern->B);
+    (void)free(pattern);
+  }
   (void)free(stat_intern);
 #ifdef DEBUG
   (void)puts("Vinyl stop");
