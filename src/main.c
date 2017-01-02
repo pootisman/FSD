@@ -52,7 +52,6 @@ int main(int argc, char *argv[]) {
   /*
    * OpenGL related stuff, scene parameters and buffers
    */
-  GLFWwindow *render_target = NULL;
   GLfloat red_set = 1.0f, green_set = 1.0f, blue_set = 1.0f,
           rot_speed = ROT_SPEED, rot_axis[3] = {0.0, 1.0, 0.0};
   
@@ -163,6 +162,7 @@ int main(int argc, char *argv[]) {
           coloring_mode = 2;
         } else {
           if (argv[opt_j + 1]) {
+            coloring_mode = 3;
             pattern_name = argv[opt_j + 1];
           }
         }
@@ -178,13 +178,11 @@ int main(int argc, char *argv[]) {
     }
   }
 
-
-
-  render_target = initRenderer(viewport_w, viewport_h);
+  initRenderer(viewport_w, viewport_h);
 
   cube_ready = mmap(NULL, sizeof(unsigned char), PROT_WRITE | PROT_READ,
                     MAP_ANONYMOUS | MAP_SHARED, -1, 0);
-  color_cube = initCube(64);
+  color_cube = initCube(64, rot_speed);
 
   vinyl_prep(window_size * 3, points_per_step, run_loop, color_cube,
              CUBE_POINTS, cube_ready, red_set, green_set, blue_set, figure_mode,
@@ -203,18 +201,16 @@ int main(int argc, char *argv[]) {
 
   forked = fork();
 
-  while (!glfwWindowShouldClose(render_target)) {
+  while (*cube_ready == 0) {
     if (forked == 0) {
       vinyl_read_disk(analyzed_name);
       vinyl_stop();
       return EXIT_SUCCESS;
     } else {
       (void)reloadVBO();
-      (void)renderSpectrum();
+      *cube_ready = renderSpectrum();
     }
   }
-
-  *cube_ready = 1;
 
   (void)sleep(1);
   (void)free(analyzed_name);

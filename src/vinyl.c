@@ -43,7 +43,8 @@ unsigned char spec_dim, unsigned char *stop, GLfloat R, GLfloat G, GLfloat B, un
 /* Load pattern that will be displayed in the cube */
 int load_pattern(char *fname){
   FILE *I = fopen(fname, "r");
-  unsigned int red_total = 0, green_total = 0, blue_total = 0, j = 0, x = 0, y = 0, z = 0;
+  unsigned int red_total = 0, green_total = 0, blue_total = 0, j = 0;
+  unsigned long int x = 0, y = 0, z = 0;
   unsigned char red_steps[3] = {0}, green_steps[3] = {0}, blue_steps[3] = {0};
 
   if(I == NULL){
@@ -53,10 +54,13 @@ int load_pattern(char *fname){
   
   pattern = calloc(1, sizeof(CUBE_PATTERN));
   
-  (void)fscanf(I, "%hhu %hhu %hhu\n", &(pattern->R_dims[0]), &(pattern->R_dims[1]), &(pattern->R_dims[2]));
-  (void)fscanf(I, "%hhu %hhu %hhu\n", &(pattern->G_dims[0]), &(pattern->G_dims[1]), &(pattern->G_dims[2]));
-  (void)fscanf(I, "%hhu %hhu %hhu\n\n", &(pattern->B_dims[0]), &(pattern->B_dims[1]), &(pattern->B_dims[2]));
-
+  if(3 != fscanf(I, "%ld %ld %ld\n", &(pattern->R_dims[0]), &(pattern->R_dims[1]), &(pattern->R_dims[2])) ||
+     3 != fscanf(I, "%ld %ld %ld\n", &(pattern->G_dims[0]), &(pattern->G_dims[1]), &(pattern->G_dims[2])) ||
+     3 != fscanf(I, "%ld %ld %ld\n\n", &(pattern->B_dims[0]), &(pattern->B_dims[1]), &(pattern->B_dims[2]))){
+    (void)puts("Error! Failed to load pattern!");
+    return -1;
+  }
+  
   red_total = pattern->R_dims[0] * pattern->R_dims[1] * pattern->R_dims[2];
   green_total = pattern->G_dims[0] * pattern->G_dims[1] * pattern->G_dims[2];
   blue_total = pattern->B_dims[0] * pattern->B_dims[1] * pattern->B_dims[2];
@@ -196,7 +200,6 @@ int load_pattern(char *fname){
 void update_stats(unsigned char *vector1, unsigned char
 *vector2){
   unsigned long int i = 0, max = 0;
-  float mean = 0.0f, variance = 0.0f, entropy = 0.0f;
 
   /* Modify local stats */
   for(i = 0; i < params->pps; i++){
@@ -233,12 +236,6 @@ void update_stats(unsigned char *vector1, unsigned char
       max = *(stat_intern + i);
     }
   }
-
-  /* Calculate variance, mean, entropy and decide on color that we must choose
-  for(i = 0; i < params->spec_dimensions * params.spec_dimensions * params->spec_dimensions; i++){
-    variance += (float)*(stat_intern)
-  }
-  */
 
   /* Update the actual stats */
   for(i = 0; i < (unsigned long int)(params->spec_dimensions*params->spec_dimensions*params->spec_dimensions); i++){

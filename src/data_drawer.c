@@ -20,26 +20,69 @@ GLfloat deg_step = 0.5, rot_Angle = 0.0, rot_Axis[3] = {0.0, 1.0, 0.0}, rot_Spee
 unsigned short dimensions = CUBE_POINTS;
 unsigned char shape = CUBE;
 
-GLFWwindow *render_target = NULL;
+Window win, root_win;
+Display *dpy = NULL;
+XVisualInfo *XVInfo = NULL;
+int scr, fbcount = 0;
+GLXContext context;
+GLXFBConfig fbconfig = 0;
+XSetWindowAttributes winattr;
+XEvent xev;
 
 /* Sleep for this time between frames */
 struct timespec sleeper = {0, 1e9 / FPS};
 
-GLFWwindow *initRenderer(int width, int height)
+inline void fullscreen(Display* dpy, Window win) {
+  Atom atoms[2] = { XInternAtom(dpy, "_NET_WM_STATE_FULLSCREEN", False), None };
+  XChangeProperty(
+      dpy, 
+      win, 
+      XInternAtom(dpy, "_NET_WM_STATE", False),
+      XA_ATOM, 32, PropModeReplace, atoms, 1
+  );
+}
+
+Window *initRenderer(int width, int height)
 {
-  int vid_modes = 0;
-  if(!glfwInit()) {
+  int attribs[100];
+  GLXFBConfig *configs = NULL;
+  
+  dpy = XOpenDisplay(NULL);
+  
+  if(dpy == NULL) {
 #ifdef DEBUG
-    (void)puts("Severe failure, glfwInit() failed.");
+    (void)puts("Connection to X server failed.");
 #endif
     return NULL;
   }
 
+  scr = XDefaultScreen(dpy);
+  
+  memcpy(&(attribs[0]), &(Visual_attribs), sizeof(Visual_attribs));
+  
+  configs = glXChooseFBConfig(dpy, scr, &(attribs[0]), &fbcount);
+  
+  if(configs == NULL || fbcount <= 0){
+    (void)puts("Error, requested videomode not available");
+    XCloseDisplay(dpy);
+    return NULL;
+  }
+  
+  fbconfig = *(configs);
+  XFree(configs);
+  
+  XVInfo = glXGetVisualFromFBConfig(dpy, fbconfig);
+  
+  if(XVInfo == NULL){
+    (void)puts("Error, failed to get visual info for FB configuration");
+    XCloseDisplay(dpy);
+    return NULL;
+  }
+  
+
   if(width <= 0 || height <= 0){
-    GLFWmonitor *mon = glfwGetPrimaryMonitor();
-    GLFWvidmode *vidmode = glfwGetVideoModes(mon, &vid_modes);
-    width = (vidmode + vid_modes - 1)->width;
-    height = (vidmode + vid_modes - 1)->height;
+    width = XWidthOfScreen(XScreenOfDisplay(dpy, scr));
+    height = XHeightOfScreen(XScreenOfDisplay(dpy, scr));
 
 #ifdef DEBUG
     (void)printf("Invalid W,H set to %d,%d\n", width, height);
@@ -47,30 +90,38 @@ GLFWwindow *initRenderer(int width, int height)
   }
 
 #ifdef DEBUG
-    (void)printf("W,H set to %d,%d\n", width, height);
+  (void)printf("W,H set to %d,%d\n", width, height);
 #endif
 
-  glfwWindowHint(GLFW_SAMPLES, 8);
-  glfwWindowHint(GLFW_DECORATED, 0);
-  if(!(render_target = glfwCreateWindow(width, height, "FSD", glfwGetPrimaryMonitor(), NULL))) {
-#ifdef DEBUG
-    printf("Error while initializing graphics");
-#endif
-    glfwTerminate();
-    return NULL;
-  }
+  root_win = DefaultRootWindow(dpy);
 
-  glfwMakeContextCurrent(render_target);
+  winattr.background_pixel = 0;
+  winattr.border_pixel = 0;
+  winattr.background_pixmap = None;
+  winattr.event_mask = StructureNotifyMask | ExposureMask | KeyPressMask;
+  
+  winattr.colormap = XCreateColormap(dpy, root_win, XVInfo->visual, AllocNone);
 
+  win = XCreateWindow(dpy, root_win, 0, 0, width, height, 0, XVInfo->depth,
+        InputOutput, XVInfo->visual, CWColormap | CWEventMask, &winattr);
+
+  context = glXCreateContext(dpy, XVInfo, NULL, GL_TRUE);
+  glXMakeCurrent(dpy, win, context);
+  
   if(GLEW_OK != glewInit()) {
 #ifdef DEBUG
     (void)puts("GLEW initialization failed!");
 #endif
-    glfwDestroyWindow(render_target);
-    glfwTerminate();
+    glXDestroyContext(dpy, context);
+    XDestroyWindow(dpy, win);
+    XCloseDisplay(dpy);
     return NULL;
   }
-
+  
+  fullscreen(dpy,win);
+  XMapWindow(dpy, win);
+  XStoreName(dpy, win, "FSD");
+  
   glClearColor(0.0, 0.0, 0.0, 0.0);
   glClear(GL_COLOR_BUFFER_BIT);
   glMatrixMode(GL_MODELVIEW);
@@ -90,12 +141,12 @@ GLFWwindow *initRenderer(int width, int height)
     (void)puts("Graphics ready!");
   #endif
 
-  return render_target;
+  return &win;
 }
 
 
-    void
-    prepCubeVBO(void)
+void
+prepCubeVBO(void)
 {
   glGenBuffers(1, &(VBO_buffers[0]));
   glBindBuffer(GL_ARRAY_BUFFER, VBO_buffers[0]);
@@ -112,18 +163,20 @@ GLFWwindow *initRenderer(int width, int height)
   glBindBuffer(GL_ARRAY_BUFFER, 0);
 }
 
-    void
-    prepFlatVBO(void)
+void
+prepFlatVBO(void)
 {
   glGenBuffers(1, &(VBO_buffers[0]));
   glBindBuffer(GL_ARRAY_BUFFER, VBO_buffers[0]);
-  glBufferData(GL_ARRAY_BUFFER, dimensions * dimensions * 3 * sizeof(GLfloat), coords, GL_STATIC_DRAW);
+  glBufferData(GL_ARRAY_BUFFER, dimensions * dimensions * 3 * sizeof(GLfloat),
+              coords, GL_STATIC_DRAW);
   glVertexPointer(3, GL_FLOAT, 0, NULL);
   glEnableClientState(GL_VERTEX_ARRAY);
 
   glGenBuffers(1, &(VBO_buffers[1]));
   glBindBuffer(GL_ARRAY_BUFFER, VBO_buffers[1]);
-  glBufferData(GL_ARRAY_BUFFER, dimensions * dimensions * 4 * sizeof(GLfloat), colors, GL_DYNAMIC_DRAW);
+  glBufferData(GL_ARRAY_BUFFER, dimensions * dimensions * 4 * sizeof(GLfloat),
+              colors, GL_DYNAMIC_DRAW);
   glColorPointer(4, GL_FLOAT, 0, NULL);
   glEnableClientState(GL_COLOR_ARRAY);
 
@@ -133,8 +186,8 @@ GLFWwindow *initRenderer(int width, int height)
 #ifndef DEBUG
 inline
 #endif
-    void
-    prepDiskVBO(void)
+void
+prepDiskVBO(void)
 {
   glGenBuffers(1, &(VBO_buffers[0]));
   glBindBuffer(GL_ARRAY_BUFFER, VBO_buffers[0]);
@@ -154,8 +207,8 @@ inline
 #ifndef DEBUG
 inline
 #endif
-    void
-    prepSphereVBO(void)
+void
+prepSphereVBO(void)
 {
   glGenBuffers(1, &(VBO_buffers[0]));
   glBindBuffer(GL_ARRAY_BUFFER, VBO_buffers[0]);
@@ -175,11 +228,13 @@ inline
 /*
  * Cube made out of points
  */
-GLfloat *initCube(unsigned short dim)
+GLfloat *initCube(unsigned short dim, GLfloat rot_speed)
 {
   if(dim == 0) {
     dim = CUBE_POINTS;
   }
+
+  rot_Speed = rot_speed;
 
   unsigned int i = 0;
   dimensions = dim;
@@ -285,31 +340,30 @@ void reloadVBO(void)
 {
   GLfloat *ptr = NULL;
   switch(shape) {
-  case(CUBE): {
-    glBindBuffer(GL_ARRAY_BUFFER, VBO_buffers[1]);
-    ptr = glMapBuffer(GL_ARRAY_BUFFER, GL_WRITE_ONLY);
-    memcpy(ptr, colors, sizeof(GLfloat) * 4 * dimensions * dimensions * dimensions);
-    glUnmapBuffer(GL_ARRAY_BUFFER);
-    glBindBuffer(GL_ARRAY_BUFFER, 0);
-    break;
-  }
-  case(FLAT):{
-    glBindBuffer(GL_ARRAY_BUFFER, VBO_buffers[0]);
-    ptr = glMapBuffer(GL_ARRAY_BUFFER, GL_WRITE_ONLY);
-    memcpy(ptr, coords, sizeof(GLfloat) * 3 * 8 * dimensions * dimensions);
-    glUnmapBuffer(GL_ARRAY_BUFFER);
-    glBindBuffer(GL_ARRAY_BUFFER, 0);
-    break;
-  }
-  default: {
-    (void)puts("Something is wrong, invalid VBO shape!");
-    break;
-  }
+    case(CUBE): {
+      glBindBuffer(GL_ARRAY_BUFFER, VBO_buffers[1]);
+      ptr = glMapBuffer(GL_ARRAY_BUFFER, GL_WRITE_ONLY);
+      memcpy(ptr, colors, sizeof(GLfloat) * 4 * dimensions * dimensions * dimensions);
+      glUnmapBuffer(GL_ARRAY_BUFFER);
+      glBindBuffer(GL_ARRAY_BUFFER, 0);
+      break;
+    }
+    case(FLAT):{
+      glBindBuffer(GL_ARRAY_BUFFER, VBO_buffers[0]);
+      ptr = glMapBuffer(GL_ARRAY_BUFFER, GL_WRITE_ONLY);
+      memcpy(ptr, coords, sizeof(GLfloat) * 3 * 8 * dimensions * dimensions);
+      glUnmapBuffer(GL_ARRAY_BUFFER);
+      glBindBuffer(GL_ARRAY_BUFFER, 0);
+      break;
+    }
+    default: {
+      (void)puts("Something is wrong, invalid VBO shape!");
+      break;
+    }
   }
 }
 
-void renderSpectrum(void)
-{
+int renderSpectrum(void){
   (void)glClear(GL_COLOR_BUFFER_BIT);
   (void)glPushMatrix();
   /* Move the cube to the position */
@@ -328,20 +382,20 @@ void renderSpectrum(void)
       (void)glDrawArrays(GL_POINTS, 0, dimensions * dimensions * dimensions);
       break;
     }
-/*    case(FLAT):{
-      /*
-       * TODO: Figure out how to draw cubes efficiently!
-       *
-      (void)glDrawArrays(GL_)
-      break;
-    }*/
   }
   (void)glPopMatrix();
-  (void)glfwSwapBuffers(render_target);
+  
+  (void)glXSwapBuffers(dpy, win);
   (void)nanosleep(&sleeper, NULL);
-  (void)glfwPollEvents();
   rot_Angle += 360.0f * rot_Speed / FPS / 60.0f;
   (rot_Angle > 360.0f) ? (rot_Angle = rot_Angle - 360.0f) : (rot_Angle = rot_Angle);
+
+  if(XCheckMaskEvent(dpy, KeyPressMask, &xev) == True){
+    terminateDrawer();
+    return 1;
+  }else{
+    return 0;
+  }
 }
 
 void terminateDrawer()
@@ -356,16 +410,18 @@ void terminateDrawer()
     glBindBuffer(GL_ARRAY_BUFFER, VBO_buffers[1]);
     glDeleteBuffers(1, &(VBO_buffers[1]));
     (void)munmap(colors, dimensions * dimensions * dimensions * 4 * sizeof(GLfloat));
+    break;
   }
   default: {
     (void)puts("Something is wrong, invalid VBO shape, memory leak is likely!");
     break;
   }
   }
-
-  glfwDestroyWindow(render_target);
-  glfwTerminate();
-
+  glXMakeCurrent(dpy, None, NULL);
+  glXDestroyContext(dpy, context);
+  XUnmapWindow(dpy, win);
+  XDestroyWindow(dpy, win);
+  XCloseDisplay(dpy);
 #ifdef DEBUG
   (void)puts("Data drawer terminated");
 #endif

@@ -22,9 +22,9 @@ typedef struct VINYL_PARAMS{
 }VINYL_PARAMS;
 
 typedef struct CUBE_PATTERN{
-  unsigned char R_dims[3];
-  unsigned char G_dims[3];
-  unsigned char B_dims[3];
+  unsigned long int R_dims[3];
+  unsigned long int G_dims[3];
+  unsigned long int B_dims[3];
   double *R,*G,*B;
 }CUBE_PATTERN;
 
