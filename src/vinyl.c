@@ -11,12 +11,36 @@
 #include <memory.h>
 #include <time.h>
 #include <sys/types.h>
+#include <signal.h>
 #include "vinyl.h"
 
 VINYL_PARAMS *params = NULL;
 CUBE_PATTERN *pattern = NULL;
 double *stat_intern = NULL;
+
+double latest_max_var = 0.0;
+double latest_max_mean = 0.0;
+double latest_max_kurt = 0.0;
+
+double curr_variance = 0.0;
+double curr_mean = 0.0;
+double curr_kurt = 0.0;
+
+double prev_variance = 0.0;
+double prev_mean = 0.0;
+double prev_kurt = 0.0;
+
 struct timespec win_timer = {0, 1e9/600};
+
+void abrt_handle(int sig){
+#ifdef DEBUG
+  (void)printf("Received signal %d", sig);
+  fflush(stdout);
+#endif
+  if(sig == SIGABRT){
+    *(params->stop) = 1;
+  }
+}
 
 void vinyl_prep(unsigned long int window_size, unsigned int pps, unsigned char loop, GLfloat *spectrum,
 unsigned char spec_dim, unsigned char *stop, GLfloat R, GLfloat G, GLfloat B, unsigned char win_figure, unsigned int reads_per_sec, double timeout){
@@ -33,11 +57,48 @@ unsigned char spec_dim, unsigned char *stop, GLfloat R, GLfloat G, GLfloat B, un
   params->G = (G >= 0.1 && G <= 1.0) ? (G) : (1.0);
   params->B = (B >= 0.1 && B <= 1.0) ? (B) : (1.0);
   params->win_figure = win_figure;
-  
+  params->dynamic = 0;
   params->timeout = (timeout > 0) ? (timeout) : (MAXTIMEOUT);
 
   stat_intern = calloc(spec_dim*spec_dim*spec_dim, sizeof(double));
   win_timer.tv_nsec = 1e9/reads_per_sec;
+  signal(SIGABRT, &abrt_handle);
+}
+
+void init_mean(void){
+  unsigned int i = 0;
+  for(i = 0; i < params->win_size * 3; i++){
+    curr_mean += params->dest[i]/(params->win_size * 3);
+  }
+
+  prev_mean = curr_mean;
+  latest_max_mean = 0.0;
+
+  params->R = (GLfloat)(fabs(curr_mean - prev_mean));
+#ifdef DEBUG
+  (void)printf("New R is %f\n", params->R);
+#endif
+}
+
+void vinyl_dynamic_coloring(unsigned char dynamic){
+  params->dynamic = dynamic;
+}
+
+void update_dynamic_coloring(unsigned char *vector_add, unsigned char *vector_rm){
+  unsigned int i = 0;
+  for(i = 0; i < params->pps; i++){
+    curr_mean = curr_mean - (double)(vector_rm[i])/(params->win_size * 3) + (double)(vector_add[i])/(params->win_size * 3);
+  }
+
+  if(fabs(curr_mean - prev_mean) > latest_max_mean){
+    latest_max_mean = fabs(curr_mean - prev_mean);
+  }
+
+  params->R = (GLfloat)(1.0 - fabs(curr_mean - prev_mean)/latest_max_mean);
+#ifdef DEBUG
+  (void)printf("New R is %f\n", params->R);
+  (void)fflush(stdout);
+#endif
 }
 
 /* Load pattern that will be displayed in the cube */

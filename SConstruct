@@ -4,9 +4,9 @@ debug = ARGUMENTS.get('debug',False)
 env = Environment()
 
 if not debug:
-	env.Append(CCFLAGS='-s -v -Wall -Wextra -O2')
+	env.Append(CCFLAGS='-std=gnu99 -s -Wall -Wextra -O3')
 else:
-	env.Append(CCFLAGS='-DDEBUG -g -v -Wall -Wextra -O0')
+	env.Append(CCFLAGS='-std=gnu99 -DDEBUG -g -Wall -Wextra -O0')
 
 
 Object_source_list = Glob('src/!main.c')

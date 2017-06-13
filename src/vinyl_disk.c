@@ -16,6 +16,7 @@ extern VINYL_PARAMS *params;
 extern CUBE_PATTERN *pattern;
 extern double *stat_intern;
 extern struct timespec win_timer;
+unsigned char mean_calcd = 0;
 
 int vinyl_read_disk(char *root){
   struct stat source_stat;
@@ -27,6 +28,10 @@ int vinyl_read_disk(char *root){
   (void)printf("Playing source %s\n", root);
   (void)fflush(stdout);
 #endif
+  if(root == NULL){
+    return EXIT_FAILURE;
+  }
+
   stat(root, &source_stat);
 
   if(S_ISDIR(source_stat.st_mode)){
@@ -52,6 +57,7 @@ int vinyl_read_disk(char *root){
         }
         dir_enrtry = readdir(listing);
       }
+      closedir(listing);
     }
   }else if(S_ISREG(source_stat.st_mode)){
     unsigned char input[3 * params->pps], deletion[3 * params->pps];
@@ -68,6 +74,10 @@ int vinyl_read_disk(char *root){
           fill += read;
           if(fill > params->win_size){
             fill = params->win_size;
+            if(mean_calcd == 0 && params->dynamic == 1){
+              mean_calcd = 1;
+              init_mean();
+            }
           }
           for(unsigned int i = 0; i < read; i++){
             deletion[i] = *(params->dest + params->win_pos + i);
@@ -75,6 +85,15 @@ int vinyl_read_disk(char *root){
           for(unsigned int i = 0; i < read; i++){
             *(params->dest + (params->win_pos + i)%params->win_size) = input[i];
           }
+
+          if(params->dynamic == 1){
+#ifdef DEBUG
+            (void)puts("Updating colors dynamically");
+            (void)fflush(stdout);
+#endif
+            update_dynamic_coloring(&(deletion[0]), &(input[0]));
+          }
+
           switch(params->win_figure){
             case(0):{
               update_stats(&(deletion[0]), &(input[0]));
@@ -91,9 +110,13 @@ int vinyl_read_disk(char *root){
           params->win_pos = (params->win_pos + read)%params->win_size;
           (void)nanosleep(&win_timer, NULL);
         }
-        (void)fseek(handle, 0, SEEK_SET);
+        if(handle != NULL){
+          (void)fseek(handle, 0, SEEK_SET);
+        }
       }while(params->loop == 1 && *(params->stop) == 0);
-      (void)fclose(handle);
+      if(handle != NULL){
+        (void)fclose(handle);
+      }
     }
   }else if(S_ISCHR(source_stat.st_mode) || S_ISBLK(source_stat.st_mode)){
     unsigned long int num_reads = rand();
@@ -111,6 +134,10 @@ int vinyl_read_disk(char *root){
           fill += read;
           if(fill > params->win_size){
             fill = params->win_size;
+            if(mean_calcd == 0 && params->dynamic == 1){
+              mean_calcd = 1;
+              init_mean();
+            }
           }
           for(unsigned int i = 0; i < read; i++){
             deletion[i] = *(params->dest + params->win_pos + i);
@@ -118,6 +145,15 @@ int vinyl_read_disk(char *root){
           for(unsigned int i = 0; i < read; i++){
             *(params->dest + (params->win_pos + i)%params->win_size) = input[i];
           }
+
+          if(params->dynamic == 1){
+#ifdef DEBUG
+            (void)puts("Updating colors dynamically");
+            (void)fflush(stdout);
+#endif
+            update_dynamic_coloring(&(deletion[0]), &(input[0]));
+          }
+
           switch(params->win_figure){
             case(0):{
               update_stats(&(deletion[0]), &(input[0]));
@@ -134,10 +170,14 @@ int vinyl_read_disk(char *root){
           params->win_pos = (params->win_pos + read)%params->win_size;
           (void)nanosleep(&win_timer, NULL);
         }
-        (void)fseek(handle, 0, SEEK_SET);
+        if(handle != NULL){
+          (void)fseek(handle, 0, SEEK_SET);
+        }
         num_reads--;
       }while(num_reads > 0);
-      (void)fclose(handle);
+      if(handle != NULL){
+        (void)fclose(handle);
+      }
     }
   }else{
     return EXIT_FAILURE;

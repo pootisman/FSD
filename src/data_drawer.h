@@ -34,7 +34,7 @@ static const int Visual_attribs[] ={
   None
 };
 
-Window *initRenderer(int width, int height);
+Window *initRenderer(int width, int height, int window_mode);
 
 GLfloat *initCube(unsigned short dim, GLfloat rot_speed);
 GLfloat *initFlat(unsigned short dim, GLfloat *(color));

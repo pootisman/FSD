@@ -1,0 +1,10 @@
+SConstruct
+src/data_drawer.c
+src/data_drawer.h
+src/main.c
+src/mman.c
+src/mman.h
+src/vinyl.c
+src/vinyl.h
+src/vinyl_disk.c
+src/vinyl_disk.h

@@ -8,6 +8,8 @@
 #include <unistd.h>
 #ifndef WIN32
 #include <sys/mman.h>
+#include <sys/wait.h>
+#include <sys/types.h>
 #else
 #include "mman.h"
 #endif
@@ -16,7 +18,7 @@
 #include <math.h>
 #include <memory.h>
 
-#define WIN_SIZE 10e6
+#define WIN_SIZE 10e4
 #define VIEW_WIDTH                                                             \
   -1 /* Invalid sizes used to trigger autodetection of monitor size */
 #define VIEW_HEIGHT -1
@@ -24,7 +26,7 @@
 #define ROT_SPEED 2.0f       /* Rotation speed of our cube */
 #define CUBE_POINTS 64       /* Number of points in our cube */
 #define DEFAULT_TARG "./FSD" /* Read from root by default */
-#define DEF_NSAMPS 50        /* How many samples to read per second */
+#define DEF_NSAMPS 100        /* How many samples to read per second */
 
 #define HELP_MESSAGE                                                           \
   "Help for FSD (File Spectrum Display):\nCMD     "                            \
@@ -34,19 +36,20 @@
   "cube\n--RPM      Set cube rotation speed\n--win_size Set window size for smaples\n--pps      Number of "   \
   "bytes per sample\n--picture  Set visual for rendering\n--axis     Set "     \
   "origin for rotation\n--readtou  Set timeout for points\n--readrate Set "    \
-  "sampling rate per second\n"
+  "sampling rate per second\n--coloring set coloring mode of the cube\n"
 
 GLfloat *color_cube = NULL;
 
 /* Allowed options */
-const struct option ALLOWED[13] = {
+const struct option ALLOWED[15] = {
     {"help", 0, NULL, 0},       {"file", 1, NULL, 1},
     {"width", 1, NULL, 2},      {"height", 1, NULL, 3},
     {"color", 1, NULL, 4},      {"RPM", 2, NULL, 5},
     {"win_size", 1, NULL, 6},   {"pps", 1, NULL, 7},
     {"picture", 1, NULL, 8},    {"axis", 1, NULL, 9},
     {"readtiout", 1, NULL, 10}, {"readrate", 1, NULL, 11},
-    {"coloring", 1, NULL, 12}};
+    {"coloring", 1, NULL, 12},  {"xscr", 0, NULL, 13},
+    {NULL, 0, 0, 1499} };
 
 int main(int argc, char *argv[]) {
   /*
@@ -57,7 +60,7 @@ int main(int argc, char *argv[]) {
   
   double timeoutval = 5;
   
-  unsigned char *cube_ready = NULL, run_loop = 0, figure_mode = 1, coloring_mode;
+  unsigned char *cube_ready = NULL, run_loop = 0, figure_mode = 1, coloring_mode = 1, xscr = 0;
   
   char *pattern_name = NULL,
        *analyzed_name = realpath(DEFAULT_TARG, NULL),
@@ -69,34 +72,34 @@ int main(int argc, char *argv[]) {
   unsigned int color_int = 0, sample_rate = DEF_NSAMPS;
   unsigned long int window_size = WIN_SIZE, points_per_step = 20;
   /* Used in option parsing, indexes */
-  int opt_i = 0, opt_j = 1;
+  int opt_i = 0, opt_j = 1, *child_pid = calloc(1, sizeof(int));
   /* Size of our screen */
   int viewport_w = VIEW_WIDTH, viewport_h = VIEW_HEIGHT;
 
-  while ((opt_i = getopt_long_only(argc, argv, "", &(ALLOWED[0]), NULL)) !=
-         -1) {
-    switch (opt_i) {
-    case (0): {
+  while((opt_i = getopt_long_only(argc, argv, "", &(ALLOWED[0]), NULL)) !=-1){
+    switch(opt_i){
+    case(0):{
       (void)puts(HELP_MESSAGE);
       return EXIT_FAILURE;
+      break;
     }
-    case (1): {
+    case(1):{
       (void)free(analyzed_name);
       analyzed_name = realpath(argv[opt_j + 1], NULL);
       opt_j += 2;
       break;
     }
-    case (2): {
+    case(2):{
       viewport_w = atoi(argv[opt_j + 1]);
       opt_j += 2;
       break;
     }
-    case (3): {
+    case(3):{
       viewport_h = atoi(argv[opt_j + 1]);
       opt_j += 2;
       break;
     }
-    case (4): {
+    case(4):{
       strncpy(&(color_string[0]), argv[opt_j + 1], 8);
       /* Parse color set by user */
       sscanf(&(color_string[0]), "%u", &color_int);
@@ -106,79 +109,92 @@ int main(int argc, char *argv[]) {
       opt_j += 2;
       break;
     }
-    case (5): {
+    case(5):{
       rot_speed = atof(argv[opt_j + 1]);
       opt_j += 2;
       break;
     }
-    case (6): {
-      if (argv[opt_j + 1]) {
+    case(6):{
+      if(argv[opt_j + 1]) {
         window_size = atoi(argv[opt_j + 1]);
         opt_j += 2;
       }
       break;
     }
-    case (7): {
-      if (argv[opt_j + 1]) {
+    case(7):{
+      if(argv[opt_j + 1]) {
         points_per_step = atoi(argv[opt_j + 1]);
         opt_j += 2;
       }
       break;
     }
-    case (8): {
-      if (argv[opt_j + 1]) {
+    case(8):{
+      if(argv[opt_j + 1]) {
         figure_mode = atoi(argv[opt_j + 1]);
         opt_j += 2;
       }
       break;
     }
-    case (9): {
-      if (argv[opt_j + 1]) {
+    case(9):{
+      if(argv[opt_j + 1]) {
         (void)sscanf(argv[opt_j + 1], "[%f,%f,%f]", &(rot_axis[0]),
                      &(rot_axis[1]), &(rot_axis[2]));
         opt_j += 2;
       }
       break;
     }
-    case (10): {
+    case(10): {
       if (argv[opt_j + 1]) {
         timeoutval = atof(argv[opt_j + 1]);
         opt_j += 2;
       }
       break;
     }
-    case (11): {
+    case(11):{
       if (argv[opt_j + 1]) {
         sample_rate = atoi(argv[opt_j + 1]);
         opt_j += 2;
       }
       break;
     }
-    case (12): {
+    case(12):{
       if (argv[opt_j + 1]) {
         if (strncmp(argv[opt_j + 1], "static", 6) == 0) {
-          coloring_mode = 1;
+          coloring_mode = 0;
+#ifdef DEBUG
+          (void)puts("Enabled static coloring mode");
+#endif
         } else if (strncmp(argv[opt_j + 1], "probab", 6) == 0) {
-          coloring_mode = 2;
+          coloring_mode = 1;
+#ifdef DEBUG
+          (void)puts("Enabled probability coloring mode");
+#endif
         } else {
           if (argv[opt_j + 1]) {
-            coloring_mode = 3;
+            coloring_mode = 2;
             pattern_name = argv[opt_j + 1];
+#ifdef DEBUG
+            (void)puts("Enabled pattern coloring mode");
+#endif
           }
         }
         opt_j += 2;
       }
       break;
     }
-    default: {
-      (void)printf("Unknown option detected: %s\n", argv[opt_j]);
+    case(13):{
+      xscr = 1;
+      opt_j++;
+      break;
+    }
+    default:{
       opt_j++;
       break;
     }
     }
   }
 
-  initRenderer(viewport_w, viewport_h);
+  initRenderer(viewport_w, viewport_h, xscr);
 
   cube_ready = mmap(NULL, sizeof(unsigned char), PROT_WRITE | PROT_READ,
                     MAP_ANONYMOUS | MAP_SHARED, -1, 0);
@@ -188,8 +204,12 @@ int main(int argc, char *argv[]) {
              CUBE_POINTS, cube_ready, red_set, green_set, blue_set, figure_mode,
              sample_rate, timeoutval);
              
-  if(pattern_name != NULL){
+  if(pattern_name != NULL && coloring_mode == 2){
     load_pattern(pattern_name);
+  }
+
+  if(coloring_mode == 1){
+    vinyl_dynamic_coloring(coloring_mode);
   }
   
 #ifdef DEBUG
@@ -201,18 +221,20 @@ int main(int argc, char *argv[]) {
 
   forked = fork();
 
-  while (*cube_ready == 0) {
-    if (forked == 0) {
+  while(*cube_ready == 0) {
+    if(forked == 0) {
       vinyl_read_disk(analyzed_name);
       vinyl_stop();
       return EXIT_SUCCESS;
-    } else {
+    }else{
       (void)reloadVBO();
       *cube_ready = renderSpectrum();
     }
   }
 
-  (void)sleep(1);
+  (void)kill(forked, SIGALRM);
+
+  (void)waitpid(forked, child_pid, 0);
   (void)free(analyzed_name);
   (void)munmap(cube_ready, sizeof(unsigned char));
   return EXIT_SUCCESS;

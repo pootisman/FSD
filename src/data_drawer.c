@@ -10,6 +10,8 @@
 #include <GLFW/glfw3.h>
 #include <math.h>
 #include <time.h>
+#include <signal.h>
+#include <unistd.h>
 #include "data_drawer.h"
 
 GLuint VBO_buffers[2];
@@ -23,7 +25,7 @@ unsigned char shape = CUBE;
 Window win, root_win;
 Display *dpy = NULL;
 XVisualInfo *XVInfo = NULL;
-int scr, fbcount = 0;
+int scr, fbcount = 0, xscreensaver_mode = 0;
 GLXContext context;
 GLXFBConfig fbconfig = 0;
 XSetWindowAttributes winattr;
@@ -32,20 +34,27 @@ XEvent xev;
 /* Sleep for this time between frames */
 struct timespec sleeper = {0, 1e9 / FPS};
 
-inline void fullscreen(Display* dpy, Window win) {
+void fullscreen(Display* dpy, Window win) {
   Atom atoms[2] = { XInternAtom(dpy, "_NET_WM_STATE_FULLSCREEN", False), None };
-  XChangeProperty(
-      dpy, 
-      win, 
-      XInternAtom(dpy, "_NET_WM_STATE", False),
-      XA_ATOM, 32, PropModeReplace, atoms, 1
-  );
+  XChangeProperty(dpy, win, XInternAtom(dpy, "_NET_WM_STATE", False), XA_ATOM, 32, PropModeReplace, atoms, 1);
 }
 
-Window *initRenderer(int width, int height)
+void term_handle(int sig){
+#ifdef DEBUG
+  (void)printf("Received signal %d", sig);
+  fflush(stdout);
+#endif
+  sleep(10);
+  terminateDrawer();
+}
+
+Window *initRenderer(int width, int height, int window_mode)
 {
   int attribs[100];
   GLXFBConfig *configs = NULL;
+  xscreensaver_mode = window_mode;
+  
+  signal(SIGTERM, &term_handle);
   
   dpy = XOpenDisplay(NULL);
   
@@ -102,10 +111,15 @@ Window *initRenderer(int width, int height)
   
   winattr.colormap = XCreateColormap(dpy, root_win, XVInfo->visual, AllocNone);
 
-  win = XCreateWindow(dpy, root_win, 0, 0, width, height, 0, XVInfo->depth,
+  if(xscreensaver_mode == 0){
+    win = XCreateWindow(dpy, root_win, 0, 0, width, height, 0, XVInfo->depth,
         InputOutput, XVInfo->visual, CWColormap | CWEventMask, &winattr);
+  }else{
+    win = root_win;
+  }
 
   context = glXCreateContext(dpy, XVInfo, NULL, GL_TRUE);
+
   glXMakeCurrent(dpy, win, context);
   
   if(GLEW_OK != glewInit()) {
@@ -117,11 +131,16 @@ Window *initRenderer(int width, int height)
     XCloseDisplay(dpy);
     return NULL;
   }
-  
-  fullscreen(dpy,win);
-  XMapWindow(dpy, win);
-  XStoreName(dpy, win, "FSD");
-  
+
+
+  if(xscreensaver_mode == 0){
+    XMapWindow(dpy, win);
+    fullscreen(dpy, win);
+    XStoreName(dpy, win, "FSD");
+  }
+
+
+
   glClearColor(0.0, 0.0, 0.0, 0.0);
   glClear(GL_COLOR_BUFFER_BIT);
   glMatrixMode(GL_MODELVIEW);
@@ -391,7 +410,9 @@ int renderSpectrum(void){
   (rot_Angle > 360.0f) ? (rot_Angle = rot_Angle - 360.0f) : (rot_Angle = rot_Angle);
 
   if(XCheckMaskEvent(dpy, KeyPressMask, &xev) == True){
-    terminateDrawer();
+    if(xscreensaver_mode == 0){
+      terminateDrawer();
+    }
     return 1;
   }else{
     return 0;
@@ -420,7 +441,9 @@ void terminateDrawer()
   glXMakeCurrent(dpy, None, NULL);
   glXDestroyContext(dpy, context);
   XUnmapWindow(dpy, win);
-  XDestroyWindow(dpy, win);
+  if(xscreensaver_mode == 0){
+    XDestroyWindow(dpy, win);
+  }
   XCloseDisplay(dpy);
 #ifdef DEBUG
   (void)puts("Data drawer terminated");
