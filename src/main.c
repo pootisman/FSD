@@ -15,7 +15,6 @@
 #endif
 #include "data_drawer.h"
 #include "vinyl_disk.h"
-#include <math.h>
 #include <memory.h>
 
 #define WIN_SIZE 10e4
@@ -31,12 +30,12 @@
 #define HELP_MESSAGE                                                           \
   "Help for FSD (File Spectrum Display):\nCMD     "                            \
   "DESCRIPTION\n====================================\n--help     Print this "  \
-  "message\n--file     Set file for analysis\n--width    Set viewport "        \
-  "width\n--height   Set viewport height\n--color    Set color of the "        \
-  "cube\n--RPM      Set cube rotation speed\n--win_size Set window size for smaples\n--pps      Number of "   \
+  "message\n--file     Set file for analysis [By default reads itself]\n--width    Set viewport "        \
+  "width in pixels\n--height   Set viewport height in pixels\n--color    Set color of the "        \
+  "cube [Format is 0xRRGGBB]\n--RPM      Set cube rotation speed\n--win_size Set window size for smaples\n--pps      Number of "   \
   "bytes per sample\n--picture  Set visual for rendering\n--axis     Set "     \
-  "origin for rotation\n--readtou  Set timeout for points\n--readrate Set "    \
-  "sampling rate per second\n--coloring set coloring mode of the cube\n"
+  "origin for rotation\n--readtou  Set timeout for points in seconds\n--readrate Set "    \
+  "sampling rate per second\n--coloring set coloring mode of the cube [static, probab]\n"
 
 GLfloat *color_cube = NULL;
 
@@ -60,7 +59,7 @@ int main(int argc, char *argv[]) {
   
   double timeoutval = 5;
   
-  unsigned char *cube_ready = NULL, run_loop = 0, figure_mode = 1, coloring_mode = 1, xscr = 0;
+  unsigned char *cube_ready = NULL, run_loop = 0, figure_mode = 1, coloring_mode = 0, xscr = 0;
   
   char *pattern_name = NULL,
        *analyzed_name = realpath(DEFAULT_TARG, NULL),
@@ -102,10 +101,13 @@ int main(int argc, char *argv[]) {
     case(4):{
       strncpy(&(color_string[0]), argv[opt_j + 1], 8);
       /* Parse color set by user */
-      sscanf(&(color_string[0]), "%u", &color_int);
+      sscanf(&(color_string[0]), "%x", &color_int);
       blue_set = (GLfloat)(color_int & 255) / 255.0f;
-      green_set = (GLfloat)((color_int & 255 * 256) >> 8) / 255.0f;
-      red_set = (GLfloat)((color_int & 255 * 256 * 256) >> 16) / 255.0f;
+      green_set = (GLfloat)((color_int & (255 << 8)) >> 8) / 255.0f;
+      red_set = (GLfloat)((color_int & (255 << 16)) >> 16) / 255.0f;
+#ifdef DEBUG
+      (void)printf("Color set to [%f, %f, %f] from %s, %d\n", red_set, green_set, blue_set, color_string, color_int);
+#endif
       opt_j += 2;
       break;
     }

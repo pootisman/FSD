@@ -405,7 +405,9 @@ int renderSpectrum(void){
   (void)glPopMatrix();
   
   (void)glXSwapBuffers(dpy, win);
+#ifndef XSCREENSAVER
   (void)nanosleep(&sleeper, NULL);
+#endif
   rot_Angle += 360.0f * rot_Speed / FPS / 60.0f;
   (rot_Angle > 360.0f) ? (rot_Angle = rot_Angle - 360.0f) : (rot_Angle = rot_Angle);
 

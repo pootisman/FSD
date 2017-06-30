@@ -53,9 +53,9 @@ unsigned char spec_dim, unsigned char *stop, GLfloat R, GLfloat G, GLfloat B, un
   params->spectrum = spectrum;
   params->spec_dimensions = spec_dim;
   params->stop = stop;
-  params->R = (R >= 0.1 && R <= 1.0) ? (R) : (1.0);
-  params->G = (G >= 0.1 && G <= 1.0) ? (G) : (1.0);
-  params->B = (B >= 0.1 && B <= 1.0) ? (B) : (1.0);
+  params->R = (R >= 0.0 && R <= 1.0) ? (R) : (1.0);
+  params->G = (G >= 0.0 && G <= 1.0) ? (G) : (1.0);
+  params->B = (B >= 0.0 && B <= 1.0) ? (B) : (1.0);
   params->win_figure = win_figure;
   params->dynamic = 0;
   params->timeout = (timeout > 0) ? (timeout) : (MAXTIMEOUT);

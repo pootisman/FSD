@@ -1,4 +1,5 @@
 SConstruct
+src/FSD.c
 src/data_drawer.c
 src/data_drawer.h
 src/main.c
