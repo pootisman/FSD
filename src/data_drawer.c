@@ -447,6 +447,7 @@ void terminateDrawer()
     XDestroyWindow(dpy, win);
   }
   XCloseDisplay(dpy);
+  XFree(XVInfo);
 #ifdef DEBUG
   (void)puts("Data drawer terminated");
 #endif

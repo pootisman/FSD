@@ -202,17 +202,7 @@ int main(int argc, char *argv[]) {
                     MAP_ANONYMOUS | MAP_SHARED, -1, 0);
   color_cube = initCube(64, rot_speed);
 
-  vinyl_prep(window_size * 3, points_per_step, run_loop, color_cube,
-             CUBE_POINTS, cube_ready, red_set, green_set, blue_set, figure_mode,
-             sample_rate, timeoutval);
-             
-  if(pattern_name != NULL && coloring_mode == 2){
-    load_pattern(pattern_name);
-  }
 
-  if(coloring_mode == 1){
-    vinyl_dynamic_coloring(coloring_mode);
-  }
   
 #ifdef DEBUG
   (void)puts("Statistics are ready.");
@@ -223,8 +213,20 @@ int main(int argc, char *argv[]) {
 
   forked = fork();
 
-  while(*cube_ready == 0) {
-    if(forked == 0) {
+  while(*cube_ready == 0){
+    if(forked == 0){
+      vinyl_prep(window_size * 3, points_per_step, run_loop, color_cube,
+                 CUBE_POINTS, cube_ready, red_set, green_set, blue_set, figure_mode,
+                 sample_rate, timeoutval);
+
+      if(pattern_name != NULL && coloring_mode == 2){
+        load_pattern(pattern_name);
+      }
+
+      if(coloring_mode == 1){
+        vinyl_dynamic_coloring(coloring_mode);
+      }
+
       vinyl_read_disk(analyzed_name);
       vinyl_stop();
       return EXIT_SUCCESS;

@@ -300,7 +300,7 @@ void update_stats(unsigned char *vector1, unsigned char
 
   /* Update the actual stats */
   for(i = 0; i < (unsigned long int)(params->spec_dimensions*params->spec_dimensions*params->spec_dimensions); i++){
-    *(params->spectrum + i*4 + 3) = (GLfloat)(logf(*(stat_intern + i))/logf(max));
+    *(params->spectrum + i*4 + 3) = (GLfloat)(powf(2.0f, log10f(*(stat_intern + i)))/powf(2.0f, log10f(max)));
     if(pattern == NULL){
       *(params->spectrum + i*4) = (GLfloat)params->R;
       *(params->spectrum + i*4 + 1) = (GLfloat)params->G;
