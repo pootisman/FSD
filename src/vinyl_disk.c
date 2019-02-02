@@ -28,17 +28,13 @@ int vinyl_read_disk(char *root){
   (void)printf("Playing source %s\n", root);
   (void)fflush(stdout);
 #endif
-  if(root == NULL){
-    return EXIT_FAILURE;
-  }
-
   stat(root, &source_stat);
 
   if(S_ISDIR(source_stat.st_mode)){
     DIR *listing = opendir(root);
     if(listing != NULL){
       struct dirent *dir_enrtry = readdir(listing);
-      while(dir_enrtry != NULL){
+      while(dir_enrtry != NULL && *(params->stop) == 0){
         if(strcmp(dir_enrtry->d_name, ".") != 0 && strcmp("..", dir_enrtry->d_name) != 0){
           (void)memset(&(fullpath[0]), 0, sizeof(fullpath));
           (void)strncat(&(fullpath[0]), root, PATH_MAX/2);
@@ -57,7 +53,6 @@ int vinyl_read_disk(char *root){
         }
         dir_enrtry = readdir(listing);
       }
-      closedir(listing);
     }
   }else if(S_ISREG(source_stat.st_mode)){
     unsigned char input[3 * params->pps], deletion[3 * params->pps];
@@ -74,7 +69,7 @@ int vinyl_read_disk(char *root){
           fill += read;
           if(fill > params->win_size){
             fill = params->win_size;
-            if(mean_calcd == 0 && params->dynamic == 1){
+            if(mean_calcd == 0 && params->dynamic){
               mean_calcd = 1;
               init_mean();
             }
@@ -86,12 +81,8 @@ int vinyl_read_disk(char *root){
             *(params->dest + (params->win_pos + i)%params->win_size) = input[i];
           }
 
-          if(params->dynamic == 1){
-#ifdef DEBUG
-            (void)puts("Updating colors dynamically");
-            (void)fflush(stdout);
-#endif
-            update_dynamic_coloring(&(deletion[0]), &(input[0]));
+          if(params->dynamic){
+              update_dynamic_coloring(&(deletion[0]), &(input[0]));
           }
 
           switch(params->win_figure){
@@ -110,13 +101,11 @@ int vinyl_read_disk(char *root){
           params->win_pos = (params->win_pos + read)%params->win_size;
           (void)nanosleep(&win_timer, NULL);
         }
-        if(handle != NULL){
-          (void)fseek(handle, 0, SEEK_SET);
+        if(handle){
+            (void)fseek(handle, 0, SEEK_SET);
         }
       }while(params->loop == 1 && *(params->stop) == 0);
-      if(handle != NULL){
-        (void)fclose(handle);
-      }
+      (void)fclose(handle);
     }
   }else if(S_ISCHR(source_stat.st_mode) || S_ISBLK(source_stat.st_mode)){
     unsigned long int num_reads = rand();
@@ -134,7 +123,7 @@ int vinyl_read_disk(char *root){
           fill += read;
           if(fill > params->win_size){
             fill = params->win_size;
-            if(mean_calcd == 0 && params->dynamic == 1){
+            if(mean_calcd == 0 && params->dynamic){
               mean_calcd = 1;
               init_mean();
             }
@@ -146,12 +135,8 @@ int vinyl_read_disk(char *root){
             *(params->dest + (params->win_pos + i)%params->win_size) = input[i];
           }
 
-          if(params->dynamic == 1){
-#ifdef DEBUG
-            (void)puts("Updating colors dynamically");
-            (void)fflush(stdout);
-#endif
-            update_dynamic_coloring(&(deletion[0]), &(input[0]));
+          if(params->dynamic){
+              update_dynamic_coloring(&(deletion[0]), &(input[0]));
           }
 
           switch(params->win_figure){
@@ -170,14 +155,10 @@ int vinyl_read_disk(char *root){
           params->win_pos = (params->win_pos + read)%params->win_size;
           (void)nanosleep(&win_timer, NULL);
         }
-        if(handle != NULL){
-          (void)fseek(handle, 0, SEEK_SET);
-        }
+        (void)fseek(handle, 0, SEEK_SET);
         num_reads--;
       }while(num_reads > 0);
-      if(handle != NULL){
-        (void)fclose(handle);
-      }
+      (void)fclose(handle);
     }
   }else{
     return EXIT_FAILURE;
@@ -186,6 +167,5 @@ int vinyl_read_disk(char *root){
   (void)printf("Vinyl exit\n");
   (void)fflush(stdout);
 #endif
-  (void)fflush(stdout);
   return EXIT_SUCCESS;
 }

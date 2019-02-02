@@ -11,7 +11,6 @@
 #include <memory.h>
 #include <time.h>
 #include <sys/types.h>
-#include <signal.h>
 #include "vinyl.h"
 
 VINYL_PARAMS *params = NULL;
@@ -32,16 +31,6 @@ double prev_kurt = 0.0;
 
 struct timespec win_timer = {0, 1e9/600};
 
-void abrt_handle(int sig){
-#ifdef DEBUG
-  (void)printf("Received signal %d", sig);
-  fflush(stdout);
-#endif
-  if(sig == SIGABRT){
-    *(params->stop) = 1;
-  }
-}
-
 void vinyl_prep(unsigned long int window_size, unsigned int pps, unsigned char loop, GLfloat *spectrum,
 unsigned char spec_dim, unsigned char *stop, GLfloat R, GLfloat G, GLfloat B, unsigned char win_figure, unsigned int reads_per_sec, double timeout){
   params = calloc(1, sizeof(VINYL_PARAMS));
@@ -53,16 +42,15 @@ unsigned char spec_dim, unsigned char *stop, GLfloat R, GLfloat G, GLfloat B, un
   params->spectrum = spectrum;
   params->spec_dimensions = spec_dim;
   params->stop = stop;
-  params->R = (R >= 0.0 && R <= 1.0) ? (R) : (1.0);
-  params->G = (G >= 0.0 && G <= 1.0) ? (G) : (1.0);
-  params->B = (B >= 0.0 && B <= 1.0) ? (B) : (1.0);
+  params->R = (R >= 0.1 && R <= 1.0) ? (R) : (1.0);
+  params->G = (G >= 0.1 && G <= 1.0) ? (G) : (1.0);
+  params->B = (B >= 0.1 && B <= 1.0) ? (B) : (1.0);
   params->win_figure = win_figure;
-  params->dynamic = 0;
+  
   params->timeout = (timeout > 0) ? (timeout) : (MAXTIMEOUT);
 
   stat_intern = calloc(spec_dim*spec_dim*spec_dim, sizeof(double));
   win_timer.tv_nsec = 1e9/reads_per_sec;
-  signal(SIGABRT, &abrt_handle);
 }
 
 void init_mean(void){
@@ -75,9 +63,7 @@ void init_mean(void){
   latest_max_mean = 0.0;
 
   params->R = (GLfloat)(fabs(curr_mean - prev_mean));
-#ifdef DEBUG
   (void)printf("New R is %f\n", params->R);
-#endif
 }
 
 void vinyl_dynamic_coloring(unsigned char dynamic){
@@ -95,10 +81,8 @@ void update_dynamic_coloring(unsigned char *vector_add, unsigned char *vector_rm
   }
 
   params->R = (GLfloat)(1.0 - fabs(curr_mean - prev_mean)/latest_max_mean);
-#ifdef DEBUG
+
   (void)printf("New R is %f\n", params->R);
-  (void)fflush(stdout);
-#endif
 }
 
 /* Load pattern that will be displayed in the cube */
@@ -115,10 +99,11 @@ int load_pattern(char *fname){
   
   pattern = calloc(1, sizeof(CUBE_PATTERN));
   
-  if(3 != fscanf(I, "%ld %ld %ld\n", &(pattern->R_dims[0]), &(pattern->R_dims[1]), &(pattern->R_dims[2])) ||
-     3 != fscanf(I, "%ld %ld %ld\n", &(pattern->G_dims[0]), &(pattern->G_dims[1]), &(pattern->G_dims[2])) ||
-     3 != fscanf(I, "%ld %ld %ld\n\n", &(pattern->B_dims[0]), &(pattern->B_dims[1]), &(pattern->B_dims[2]))){
+  if(3 != fscanf(I, "%lu %lu %lu\n", &(pattern->R_dims[0]), &(pattern->R_dims[1]), &(pattern->R_dims[2])) ||
+     3 != fscanf(I, "%lu %lu %lu\n", &(pattern->G_dims[0]), &(pattern->G_dims[1]), &(pattern->G_dims[2])) ||
+     3 != fscanf(I, "%lu %lu %lu\n\n", &(pattern->B_dims[0]), &(pattern->B_dims[1]), &(pattern->B_dims[2]))){
     (void)puts("Error! Failed to load pattern!");
+    (void)fclose(I);
     return -1;
   }
   
@@ -300,7 +285,7 @@ void update_stats(unsigned char *vector1, unsigned char
 
   /* Update the actual stats */
   for(i = 0; i < (unsigned long int)(params->spec_dimensions*params->spec_dimensions*params->spec_dimensions); i++){
-    *(params->spectrum + i*4 + 3) = (GLfloat)(powf(2.0f, log10f(*(stat_intern + i)))/powf(2.0f, log10f(max)));
+    *(params->spectrum + i*4 + 3) = (GLfloat)(logf(*(stat_intern + i))/logf(max));
     if(pattern == NULL){
       *(params->spectrum + i*4) = (GLfloat)params->R;
       *(params->spectrum + i*4 + 1) = (GLfloat)params->G;

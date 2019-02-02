@@ -15,6 +15,3 @@
 #endif
 #include "data_drawer.h"
 #include "vinyl_disk.h"
-#include "screenhack.h"
-
-XSCREENSAVER_MODULE="FSD"
