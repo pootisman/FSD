@@ -39,7 +39,7 @@ void fullscreen(Display* dpy, Window win) {
       dpy, 
       win, 
       XInternAtom(dpy, "_NET_WM_STATE", False),
-      XA_ATOM, 32, PropModeReplace, atoms, 1
+      XA_ATOM, 32, PropModeReplace, (unsigned char *)atoms, 1
   );
 }
 

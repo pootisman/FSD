@@ -20,6 +20,7 @@ build*
 *_resource.rc
 *.qm
 .#*
+*.dblite
 *.*#
 core
 !core/
